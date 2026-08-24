@@ -1,0 +1,14 @@
+{
+  "name": "@n8n/github-actions",
+  "private": true,
+  "description": "Shared GitHub Actions for n8n-io repositories",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@actions/core": "1.11.1",
+    "@actions/github": "9.0.0",
+    "@types/node": "26.2.0",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,13 @@
+{
+	"compilerOptions": {
+		"module": "esnext",
+		"target": "esnext",
+		"checkJs": true,
+		"allowJs": true,
+		"noEmit": true,
+		"strict": true,
+		"moduleResolution": "bundler"
+	},
+	"include": ["*/scripts/**/*.mjs"],
+	"exclude": ["node_modules"]
+}

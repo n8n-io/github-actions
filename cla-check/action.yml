@@ -1,0 +1,183 @@
+name: 'CLA Check'
+description: "Verify every contributor on a pull request has signed n8n's Contributor License Agreement"
+author: 'n8n'
+
+# Posts a commit status (default name "CLA Check") on the head SHA, maintains a
+# single edited-in-place PR comment listing unsigned contributors, and manages a
+# `cla-signed` label.
+#
+# The caller owns the triggers, permissions, concurrency and the job-level `if`
+# guard — see examples/ci-cla-check.yml. Composite actions cannot declare those,
+# and `timeout-minutes` is not supported on composite steps, so that belongs on
+# the caller's job too.
+
+inputs:
+  app-id:
+    description: 'App ID of the GitHub App used to authenticate API calls'
+    required: true
+  private-key:
+    description: 'Private key of the GitHub App'
+    required: true
+  cla-api:
+    description: 'CLA service endpoint, queried as `<cla-api>?checkContributor=<login>`'
+    required: false
+    default: 'https://cla-bot-prod.users.n8n.cloud/webhook/cla/check'
+  cla-sign-url:
+    description: 'URL contributors visit to sign the CLA'
+    required: false
+    default: 'https://cla-bot-prod.users.n8n.cloud/webhook/cla'
+  status-context:
+    description: 'Commit status name. Add this to a ruleset to gate merges on it.'
+    required: false
+    default: 'CLA Check'
+  comment-marker:
+    description: 'Hidden HTML marker identifying the comment to edit in place across re-runs'
+    required: false
+    default: '<!-- n8n-cla-check -->'
+  label-name:
+    description: 'Label applied when every contributor has signed, removed otherwise'
+    required: false
+    default: 'cla-signed'
+
+outputs:
+  all-signed:
+    description: '"true" when every contributor signed and every commit author is linked to a GitHub account'
+    value: ${{ steps.check.outputs.all_signed }}
+  unsigned:
+    description: 'Comma-separated logins that have not signed'
+    value: ${{ steps.check.outputs.unsigned }}
+  unlinked:
+    description: 'JSON array of commits whose author email is not linked to a GitHub account'
+    value: ${{ steps.check.outputs.unlinked }}
+
+runs:
+  using: composite
+  steps:
+    - name: Generate GitHub App token
+      id: app-token
+      uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+      with:
+        app-id: ${{ inputs.app-id }}
+        private-key: ${{ inputs.private-key }}
+
+    - name: Resolve PR context
+      id: context
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+      with:
+        github-token: ${{ steps.app-token.outputs.token }}
+        script: |
+          const mod = await import(`${process.env.ACTION_PATH}/scripts/resolve-context.mjs`);
+          await mod.default({ github, context, core });
+
+    - name: Post pending commit status
+      if: steps.context.outputs.head_sha != ''
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+      env:
+        HEAD_SHA: ${{ steps.context.outputs.head_sha }}
+        STATUS_CONTEXT: ${{ inputs.status-context }}
+      with:
+        github-token: ${{ steps.app-token.outputs.token }}
+        script: |
+          await github.rest.repos.createCommitStatus({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            sha: process.env.HEAD_SHA,
+            state: 'pending',
+            context: process.env.STATUS_CONTEXT,
+            description: 'Verifying CLA signatures…',
+          });
+
+    - name: Check CLA signatures
+      id: check
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        PR_NUMBER: ${{ steps.context.outputs.pr_number }}
+        HEAD_SHA: ${{ steps.context.outputs.head_sha }}
+        BASE_SHA: ${{ steps.context.outputs.base_sha }}
+        IS_MERGE_GROUP: ${{ steps.context.outputs.is_merge_group }}
+        CLA_API: ${{ inputs.cla-api }}
+      with:
+        github-token: ${{ steps.app-token.outputs.token }}
+        script: |
+          const mod = await import(`${process.env.ACTION_PATH}/scripts/check-signatures.mjs`);
+          await mod.default({ github, context, core });
+
+    - name: Post final commit status
+      if: always() && steps.context.outputs.head_sha != ''
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        HEAD_SHA: ${{ steps.context.outputs.head_sha }}
+        PR_NUMBER: ${{ steps.context.outputs.pr_number }}
+        ALL_SIGNED: ${{ steps.check.outputs.all_signed }}
+        UNSIGNED: ${{ steps.check.outputs.unsigned }}
+        ERRORED: ${{ steps.check.outputs.errored }}
+        UNLINKED: ${{ steps.check.outputs.unlinked }}
+        STATUS_CONTEXT: ${{ inputs.status-context }}
+        CLA_SIGN_URL: ${{ inputs.cla-sign-url }}
+      with:
+        github-token: ${{ steps.app-token.outputs.token }}
+        script: |
+          const mod = await import(`${process.env.ACTION_PATH}/scripts/post-final-status.mjs`);
+          await mod.default({ github, context, core });
+
+    - name: Update PR comment
+      # No PR context on merge_group, and nothing to say when the check produced no result.
+      if: >-
+        always() &&
+        steps.context.outputs.pr_number != '' &&
+        steps.check.outputs.all_signed != ''
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        PR_NUMBER: ${{ steps.context.outputs.pr_number }}
+        ALL_SIGNED: ${{ steps.check.outputs.all_signed }}
+        UNSIGNED: ${{ steps.check.outputs.unsigned }}
+        ERRORED: ${{ steps.check.outputs.errored }}
+        UNLINKED: ${{ steps.check.outputs.unlinked }}
+        COMMENT_MARKER: ${{ inputs.comment-marker }}
+        CLA_SIGN_URL: ${{ inputs.cla-sign-url }}
+      with:
+        github-token: ${{ steps.app-token.outputs.token }}
+        script: |
+          const mod = await import(`${process.env.ACTION_PATH}/scripts/update-pr-comment.mjs`);
+          await mod.default({ github, context, core });
+
+    - name: Manage signed label
+      if: >-
+        always() &&
+        steps.context.outputs.pr_number != '' &&
+        steps.check.outputs.all_signed != ''
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        PR_NUMBER: ${{ steps.context.outputs.pr_number }}
+        ALL_SIGNED: ${{ steps.check.outputs.all_signed }}
+        LABEL_NAME: ${{ inputs.label-name }}
+      with:
+        github-token: ${{ steps.app-token.outputs.token }}
+        script: |
+          const mod = await import(`${process.env.ACTION_PATH}/scripts/manage-label.mjs`);
+          await mod.default({ github, context, core });
+
+    - name: React to /cla-check comment
+      if: always() && github.event_name == 'issue_comment' && steps.check.outputs.all_signed != ''
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+      env:
+        ALL_SIGNED: ${{ steps.check.outputs.all_signed }}
+      with:
+        github-token: ${{ steps.app-token.outputs.token }}
+        script: |
+          try {
+            await github.rest.reactions.createForIssueComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: context.payload.comment.id,
+              content: process.env.ALL_SIGNED === 'true' ? '+1' : '-1',
+            });
+          } catch (e) {
+            core.info(`Could not react to comment: ${e.message}`);
+          }
