@@ -21,12 +21,26 @@ every consuming repo without review.
 
 ## Versioning
 
-Tags are `vMAJOR.MINOR.PATCH` and cover the whole repo, not individual actions.
-Bumping one action re-tags all of them; consumers only move when they bump their
-own pin.
+Tags are `<action>/vMAJOR.MINOR.PATCH`, so each action versions independently and
+releasing one leaves the others alone. The tag is a marker for humans reading the
+release notes — consumers pin to the SHA it points at, not to the tag.
 
 Bump MAJOR when an action's inputs, outputs or required permissions change in a
 way that breaks existing callers.
+
+## Releasing
+
+Run the [Release workflow](./.github/workflows/release.yml) from `main`, pick the
+action and the bump size. It typechecks, resolves the next version from the
+action's existing tags, tags the dispatched SHA and publishes a release whose
+notes contain the exact `uses:` line to paste into consuming repos. An action
+with no tags yet gets `v1.0.0` regardless of the bump chosen.
+
+Tick **dry run** to see the resolved version and rendered notes in the job
+summary without tagging.
+
+A new action must be added to the workflow's `package` dropdown — CI fails if a
+directory with an `action.yml` is missing from it.
 
 ## Development
 

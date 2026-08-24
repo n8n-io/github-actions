@@ -1,0 +1,178 @@
+name: Release
+run-name: "Release: ${{ inputs.package }} (${{ inputs.bump }})${{ inputs.dry-run && ' — dry run' || '' }}"
+
+# Tags one action at a time. Tags are `<action>/vMAJOR.MINOR.PATCH`, so actions
+# version independently and a bump to one doesn't churn the others.
+#
+# Adding a new action means adding it to the `package` options below — CI fails
+# if a directory with an action.yml is missing from that list.
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'Action to release'
+        required: true
+        type: choice
+        options:
+          - cla-check
+      bump:
+        description: 'Version bump (first release of an action is always v1.0.0)'
+        required: true
+        type: choice
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+      dry-run:
+        description: 'Resolve the version and render the notes without tagging'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  # Serialize per action: two concurrent releases would resolve the same "next"
+  # version off the same latest tag. Never cancel — a half-run release is worse
+  # than a queued one.
+  group: release-${{ inputs.package }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Release ${{ inputs.package }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Guard branch
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Releases must be dispatched from main, got ${{ github.ref }}"
+          exit 1
+
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          # Full history + tags: the next version is derived from existing tags,
+          # and the changelog diffs against the previous one.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Gate the tag on a green tree — a tag is immutable in consumers' pins.
+      - run: pnpm typecheck
+
+      - name: Resolve version
+        id: version
+        env:
+          PACKAGE: ${{ inputs.package }}
+          BUMP: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+
+          if [ ! -f "$PACKAGE/action.yml" ]; then
+            echo "::error::$PACKAGE/action.yml not found"
+            exit 1
+          fi
+
+          prev_version="$(git tag --list "$PACKAGE/v*" \
+            | sed "s|^$PACKAGE/v||" \
+            | grep -E '^[0-9]+\.[0-9]+\.[0-9]+$' \
+            | sort -V | tail -n1 || true)"
+
+          if [ -z "$prev_version" ]; then
+            next="1.0.0"
+            echo "No existing $PACKAGE tag — first release is v$next (bump input ignored)."
+          else
+            IFS=. read -r major minor patch <<<"$prev_version"
+            case "$BUMP" in
+              major) major=$((major + 1)); minor=0; patch=0 ;;
+              minor) minor=$((minor + 1)); patch=0 ;;
+              patch) patch=$((patch + 1)) ;;
+              *) echo "::error::unknown bump '$BUMP'"; exit 1 ;;
+            esac
+            next="$major.$minor.$patch"
+          fi
+
+          tag="$PACKAGE/v$next"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "::error::$tag already exists"
+            exit 1
+          fi
+
+          {
+            echo "tag=$tag"
+            echo "version=$next"
+            echo "prev_tag=${prev_version:+$PACKAGE/v$prev_version}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Render release notes
+        id: notes
+        env:
+          PACKAGE: ${{ inputs.package }}
+          VERSION: ${{ steps.version.outputs.version }}
+          PREV_TAG: ${{ steps.version.outputs.prev_tag }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          {
+            echo '```yaml'
+            echo "- uses: ${{ github.repository }}/$PACKAGE@$SHA # v$VERSION"
+            echo '```'
+            echo
+            echo "### Changes"
+            echo
+            if [ -n "$PREV_TAG" ]; then
+              git log "$PREV_TAG..HEAD" --no-merges --pretty='- %s (%h)' -- "$PACKAGE" > /tmp/commits
+            else
+              git log --no-merges --pretty='- %s (%h)' -- "$PACKAGE" > /tmp/commits
+            fi
+            if [ -s /tmp/commits ]; then
+              cat /tmp/commits
+            else
+              echo "- No commits touched \`$PACKAGE/\` since ${PREV_TAG:-the start of the repo}."
+            fi
+            if [ -n "$PREV_TAG" ]; then
+              echo
+              echo "[Full diff](${{ github.server_url }}/${{ github.repository }}/compare/$PREV_TAG...$SHA)"
+            fi
+          } > /tmp/notes.md
+
+          cat /tmp/notes.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Create tag and release
+        if: '!inputs.dry-run'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          PACKAGE: ${{ inputs.package }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" \
+            --target "$SHA" \
+            --title "$PACKAGE v$VERSION" \
+            --notes-file /tmp/notes.md
+
+      - name: Summarize
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if [ "${{ inputs.dry-run }}" = "true" ]; then
+            echo "::notice::Dry run — would have released $TAG"
+          else
+            echo "::notice::Released $TAG"
+          fi

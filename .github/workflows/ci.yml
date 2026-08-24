@@ -28,3 +28,16 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm typecheck
+
+      - name: Release dropdown covers every action
+        run: |
+          set -euo pipefail
+          missing=0
+          for path in */action.yml; do
+            name="${path%/action.yml}"
+            grep -qE "^ +- ${name}$" .github/workflows/release.yml || {
+              echo "::error::'${name}' is missing from the package options in .github/workflows/release.yml"
+              missing=1
+            }
+          done
+          exit $missing
