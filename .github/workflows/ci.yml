@@ -18,14 +18,11 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4.3.0
-
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+      - uses: pnpm/setup@123
         with:
-          node-version: 22
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
+          install: true
+          version: 11.22.0
+          runtime: node@26
 
       - run: pnpm typecheck
 
