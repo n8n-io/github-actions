@@ -11,7 +11,8 @@ License Agreement. In-house replacement for the "CLA Bot" GitHub App.
 - Maintains a single PR comment, edited in place across re-runs, listing who still
   needs to sign. A PR that was never flagged gets no comment at all.
 - Adds a `cla-signed` label when everyone has signed, removes it otherwise. The
-  label is created on first use.
+  label is created on first use. Set `apply-label: false` to opt out — the status
+  check and PR comment keep working, no labels are touched.
 - Reacts 👀 / 👍 / 👎 to `/cla-check` comments.
 
 Verification is **fail-closed**: a contributor whose CLA lookup errors, or a commit
@@ -39,6 +40,7 @@ particular is load-bearing (see the comment in the file).
 | `cla-sign-url` | no | n8n prod CLA form | URL contributors visit to sign |
 | `status-context` | no | `CLA Check` | Commit status name that rulesets gate on |
 | `comment-marker` | no | `<!-- n8n-cla-check -->` | Hidden marker identifying the comment to edit in place |
+| `apply-label` | no | `true` | Set to `false` to skip label management entirely |
 | `label-name` | no | `cla-signed` | Label applied when everyone has signed |
 
 ## Outputs

@@ -3,8 +3,8 @@ description: "Verify every contributor on a pull request has signed n8n's Contri
 author: 'n8n'
 
 # Posts a commit status (default name "CLA Check") on the head SHA, maintains a
-# single edited-in-place PR comment listing unsigned contributors, and manages a
-# `cla-signed` label.
+# single edited-in-place PR comment listing unsigned contributors, and (unless
+# `apply-label: false`) manages a `cla-signed` label.
 #
 # The caller owns the triggers, permissions, concurrency and the job-level `if`
 # guard — see examples/ci-cla-check.yml. Composite actions cannot declare those,
@@ -34,6 +34,10 @@ inputs:
     description: 'Hidden HTML marker identifying the comment to edit in place across re-runs'
     required: false
     default: '<!-- n8n-cla-check -->'
+  apply-label:
+    description: 'Whether to manage the signed label. Set to false to keep the status check and PR comment without touching labels.'
+    required: false
+    default: 'true'
   label-name:
     description: 'Label applied when every contributor has signed, removed otherwise'
     required: false
@@ -149,6 +153,7 @@ runs:
     - name: Manage signed label
       if: >-
         always() &&
+        inputs.apply-label == 'true' &&
         steps.context.outputs.pr_number != '' &&
         steps.check.outputs.all_signed != ''
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
