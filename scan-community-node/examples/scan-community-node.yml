@@ -1,0 +1,27 @@
+# Scans this community node package with GuardDog on every pull request and
+# push to main. Copy to .github/workflows/scan-community-node.yml and replace
+# the pinned SHA with the one from the latest scan-community-node release.
+
+name: Scan community node
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    name: Scan community node
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: n8n-io/github-actions/scan-community-node@<sha> # scan-community-node/v1.0.0
+        # with:
+        #   path: packages/my-node   # for a monorepo

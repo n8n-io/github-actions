@@ -5,6 +5,7 @@ Shared GitHub Actions used across `n8n-io` repositories.
 | Action | Description |
 |--------|-------------|
 | [`cla-check`](./cla-check) | Verify every contributor on a PR has signed the n8n CLA |
+| [`scan-community-node`](./scan-community-node) | Scan a community node package checkout for malicious code patterns with GuardDog |
 
 ## Consuming an action
 

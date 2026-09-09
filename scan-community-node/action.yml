@@ -1,0 +1,118 @@
+name: 'Scan Community Node'
+description: 'Scan a community node package checkout for malicious code patterns with DataDog GuardDog'
+author: 'n8n'
+
+# Runs `guarddog npm scan` against the package directory. GuardDog's source
+# code rules flag the patterns that matter for code that ends up inside an n8n
+# instance: download-and-execute, obfuscation, base64 decode and eval,
+# environment and filesystem exfiltration, silent process execution, reverse
+# shells, and similar.
+#
+# The caller owns checkout, triggers, permissions and timeout-minutes — see
+# examples/scan-community-node.yml.
+
+inputs:
+  path:
+    description: 'Directory that contains the package.json of the community node, relative to the workspace'
+    required: false
+    default: '.'
+  guarddog-version:
+    description: 'GuardDog version to run, installed from PyPI with uvx'
+    required: false
+    default: '3.2.0'
+  fail-on-finding:
+    description: 'Fail the step when GuardDog reports at least one finding. Set to false to report only. The step still fails when GuardDog itself cannot run.'
+    required: false
+    default: 'true'
+
+outputs:
+  issues:
+    description: 'Number of findings GuardDog reported'
+    value: ${{ steps.guarddog.outputs.issues }}
+  report:
+    description: 'Path to the JSON report written by GuardDog'
+    value: ${{ steps.guarddog.outputs.report }}
+
+runs:
+  using: composite
+  steps:
+    - name: Set up uv
+      uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+
+    - name: Run GuardDog
+      id: guarddog
+      shell: bash
+      env:
+        SCAN_PATH: ${{ inputs.path }}
+        GUARDDOG_VERSION: ${{ inputs.guarddog-version }}
+        FAIL_ON_FINDING: ${{ inputs.fail-on-finding }}
+        REPORT: ${{ runner.temp }}/guarddog.json
+      run: |
+        set -uo pipefail
+
+        # The version is spliced into a PyPI package spec. Restrict it to a
+        # version string so it cannot point uvx at another package.
+        if [[ ! "$GUARDDOG_VERSION" =~ ^[0-9][A-Za-z0-9.+-]*$ ]]; then
+          echo "::error::guarddog-version must be a version, got '$GUARDDOG_VERSION'"
+          exit 1
+        fi
+        if [ ! -f "$SCAN_PATH/package.json" ]; then
+          echo "::error::No package.json found in '$SCAN_PATH'. Set the 'path' input to the directory of the community node package."
+          exit 1
+        fi
+
+        # GuardDog exits 1 both for findings and for its own failures. The JSON
+        # report tells them apart: a failure leaves no parseable report.
+        set +e
+        uvx "guarddog@${GUARDDOG_VERSION}" npm scan "$SCAN_PATH" --output-format json --exit-non-zero-on-finding > "$REPORT"
+        code=$?
+        set -e
+
+        echo "report=$REPORT" >> "$GITHUB_OUTPUT"
+
+        if ! issues=$(jq -er '.issues' "$REPORT" 2>/dev/null); then
+          echo "::error::GuardDog produced no report (exit code $code). See the log above."
+          exit 1
+        fi
+        echo "issues=$issues" >> "$GITHUB_OUTPUT"
+
+        # Rule errors are GuardDog problems, not verdicts on the package.
+        jq -r '.errors | to_entries[] | "::warning title=GuardDog rule error::\(.key): \(.value)"' "$REPORT"
+
+        # One annotation per finding, attached to the file in the checkout.
+        jq -r --arg base "$SCAN_PATH" '
+          (if $base == "." then "" else $base + "/" end) as $prefix
+          | .results | to_entries[]
+          | select((.value | type) == "array" and (.value | length) > 0)
+          | .key as $rule | .value[]
+          | (.location | split(":")) as $loc
+          | "::error file=\($prefix)\($loc[0]),line=\($loc[1] // "1"),title=\($rule)::\(.message)"
+        ' "$REPORT"
+
+        # GuardDog's `issues` counts every rule match; the table lists one row
+        # per reported location, so count those for the human-facing text.
+        findings=$(jq -r '[.results[] | select(type == "array") | length] | add // 0' "$REPORT")
+
+        {
+          if [ "$issues" -eq 0 ]; then echo "## ✅ GuardDog scan of \`$SCAN_PATH\`"; else echo "## ❌ GuardDog scan of \`$SCAN_PATH\`"; fi
+          echo
+          echo "Findings: $findings. Risk: $(jq -r '.risk_score.label // "n/a"' "$REPORT") ($(jq -r '.risk_score.score // "n/a"' "$REPORT"))."
+          if [ "$issues" -gt 0 ]; then
+            echo
+            echo "| Rule | Location | Message |"
+            echo "| --- | --- | --- |"
+            jq -r '
+              .results | to_entries[]
+              | select((.value | type) == "array" and (.value | length) > 0)
+              | .key as $rule | .value[]
+              | "| `\($rule)` | `\(.location)` | \(.message | gsub("\\|"; "\\|")) |"
+            ' "$REPORT"
+          fi
+          echo
+          echo "GuardDog ${GUARDDOG_VERSION}, source code rules only. Metadata rules such as typosquatting need the published package."
+        } >> "$GITHUB_STEP_SUMMARY"
+
+        if [ "$issues" -gt 0 ] && [ "$FAIL_ON_FINDING" = "true" ]; then
+          echo "::error::GuardDog reported $findings finding(s)"
+          exit 1
+        fi
