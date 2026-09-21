@@ -6,7 +6,7 @@ inputs:
     description: Code scanning category for this tool.
     required: true
   sarif:
-    description: Workspace-relative path to the SARIF file, empty when the scanner produced none.
+    description: Workspace-relative path to the SARIF file, empty when the scanner produced none. Callers pass the security-summary output, which is only set when the file exists and is not empty.
     required: false
     default: ''
   package:
@@ -21,7 +21,7 @@ inputs:
 runs:
   using: composite
   steps:
-    - if: ${{ inputs.package == '' && inputs.upload == 'true' && inputs.sarif != '' && hashFiles(inputs.sarif) != '' }}
+    - if: ${{ inputs.package == '' && inputs.upload == 'true' && inputs.sarif != '' }}
       uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
       with:
         category: ${{ inputs.category }}

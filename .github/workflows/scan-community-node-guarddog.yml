@@ -48,6 +48,7 @@ jobs:
 
       - uses: $/scan-community-node/actions/setup
         with:
+          scanner: guarddog
           package: ${{ inputs.package }}
           version: ${{ inputs.version }}
 

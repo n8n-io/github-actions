@@ -43,6 +43,7 @@ jobs:
 
       - uses: $/scan-community-node/actions/setup
         with:
+          scanner: semgrep
           package: ${{ inputs.package }}
           version: ${{ inputs.version }}
           node: 'true'
@@ -75,7 +76,9 @@ jobs:
             # A package must not be able to tune or suppress its own scan:
             # replace its ignore file (this also disables Semgrep's default
             # ignores, so the shipped dist/ code is scanned) and disregard
-            # inline `nosemgrep` comments.
+            # inline `nosemgrep` comments. Remove first so a symlink shipped
+            # in the tarball cannot redirect the write.
+            rm -f "$TARGET/.semgrepignore"
             : > "$TARGET/.semgrepignore"
             FLAGS+=(--disable-nosem)
           fi

@@ -99,12 +99,25 @@ jobs:
           if [ "$FORK" = true ] && [ -z "$PACKAGE" ] && [[ "$normalized" == *,scorecard,* ]]; then
             echo "::notice::Skipping Scorecard: it does not support pull requests from forks."
             normalized="${normalized/,scorecard,/,}"
+            if [ "$normalized" = "," ]; then
+              # Failing here would block every fork PR of a caller that only
+              # runs Scorecard, so say loudly that nothing ran instead.
+              echo "::warning::No scanner left to run: Scorecard was the only one selected and this is a pull request from a fork."
+              {
+                echo "## Security scan skipped"
+                echo ""
+                echo "Scorecard was the only scanner selected and it does not support pull requests from forks."
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
           fi
 
           {
             echo "scanners=$normalized"
             echo "fork=$FORK"
           } >> "$GITHUB_OUTPUT"
+          if [ "$normalized" = "," ]; then
+            exit 0
+          fi
 
           if [ -n "$PACKAGE" ]; then
             TARGET="$PACKAGE"

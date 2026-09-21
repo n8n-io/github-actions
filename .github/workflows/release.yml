@@ -139,7 +139,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          # PATHS is a space-separated list of pathspecs; git expands the glob.
+          # PATHS is a space-separated list of pathspecs. Globbing is turned off
+          # so the shell only splits the words and git matches any glob against
+          # every tree in the range, including files renamed or removed since.
+          set -f
+          # shellcheck disable=SC2086
           {
             echo '```yaml'
             echo "- uses: ${{ github.repository }}/$USES_PATH@$SHA # v$VERSION"

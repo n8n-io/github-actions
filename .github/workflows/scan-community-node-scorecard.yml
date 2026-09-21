@@ -33,6 +33,7 @@ jobs:
 
       - uses: $/scan-community-node/actions/setup
         with:
+          scanner: scorecard
           package: ${{ inputs.package }}
 
       - name: Run OpenSSF Scorecard (repository)

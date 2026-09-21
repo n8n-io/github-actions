@@ -49,10 +49,12 @@ runs:
         # Strip characters that could break out of the heading.
         TARGET=$(printf '%s' "$TARGET" | tr -d '\n\r`')
 
-        if [ -n "$SARIF" ] && [ -s "$SARIF" ]; then
+        # Symlinks are rejected so a checked-in link cannot point the summary
+        # or the upload at an arbitrary file.
+        if [ -n "$SARIF" ] && [ ! -L "$SARIF" ] && [ -s "$SARIF" ]; then
           SRC=sarif
           echo "sarif=$SARIF" >> "$GITHUB_OUTPUT"
-        elif [ -n "$TEXT" ] && [ -s "$TEXT" ]; then
+        elif [ -n "$TEXT" ] && [ ! -L "$TEXT" ] && [ -s "$TEXT" ]; then
           SRC=text
         else
           {
@@ -82,8 +84,9 @@ runs:
         fi
 
         # Escape leading backticks so untrusted scan output cannot close the
-        # code fence and inject markdown into the step summary.
-        sed -i 's/^`/\\`/' "$REPORT"
+        # code fence and inject markdown into the step summary. A closing fence
+        # may be indented by up to three spaces, so those count as leading too.
+        sed -i -E 's/^( {0,3})`/\1\\`/' "$REPORT"
         {
           echo "## $SCANNER: $TARGET"
           echo ""

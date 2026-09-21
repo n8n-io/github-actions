@@ -43,6 +43,7 @@ jobs:
 
       - uses: $/scan-community-node/actions/setup
         with:
+          scanner: gitleaks
           package: ${{ inputs.package }}
           version: ${{ inputs.version }}
           node: 'true'

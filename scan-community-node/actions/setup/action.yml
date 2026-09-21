@@ -11,9 +11,12 @@ inputs:
     required: false
     default: 'latest'
   node:
-    description: Set to 'true' to also install Node.js, which npm needs to download a package.
+    description: Set to 'true' to also install Node.js, for scanners that download a package or resolve a lockfile with npm.
     required: false
     default: 'false'
+  scanner:
+    description: Scanner id. Its report files security.<scanner>.sarif and .txt are removed first, so a checked-in or stale report cannot pass for this run's result.
+    required: true
 
 runs:
   using: composite
@@ -23,6 +26,7 @@ runs:
       env:
         PACKAGE: ${{ inputs.package }}
         VERSION: ${{ inputs.version }}
+        SCANNER: ${{ inputs.scanner }}
       run: |
         set -euo pipefail
         # The inputs are spliced into command lines. Restrict them to what npm
@@ -35,8 +39,13 @@ runs:
           echo "::error::version must be a version or dist-tag, got '$VERSION'"
           exit 1
         fi
+        if [[ ! "$SCANNER" =~ ^[a-z][a-z0-9-]*$ ]]; then
+          echo "::error::scanner must be a scanner id, got '$SCANNER'"
+          exit 1
+        fi
+        rm -f "security.$SCANNER.sarif" "security.$SCANNER.txt"
 
-    - if: ${{ inputs.node == 'true' && inputs.package != '' }}
+    - if: ${{ inputs.node == 'true' }}
       uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
       with:
         node-version: 24

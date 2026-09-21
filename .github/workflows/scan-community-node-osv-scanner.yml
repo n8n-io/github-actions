@@ -43,6 +43,7 @@ jobs:
 
       - uses: $/scan-community-node/actions/setup
         with:
+          scanner: osv-scanner
           package: ${{ inputs.package }}
           version: ${{ inputs.version }}
           node: 'true'
@@ -55,15 +56,38 @@ jobs:
           version: ${{ inputs.version }}
 
       - name: Resolve package dependencies
-        if: inputs.package != ''
-        working-directory: ${{ steps.fetch.outputs.path }}
-        # A published package ships no lockfile; resolve one so OSV-Scanner
-        # sees the full dependency tree.
-        run: npm install --package-lock-only --ignore-scripts
+        id: resolve
+        env:
+          PACKAGE: ${{ inputs.package }}
+          TARGET: ${{ steps.fetch.outputs.path || github.workspace }}
+        run: |
+          set -euo pipefail
+
+          # A published package ships no lockfile, and a repository may not
+          # have one either. Without a lockfile OSV-Scanner would report a
+          # clean result while checking nothing, so resolve one. A repository
+          # gets it in a scratch copy so its checkout stays untouched.
+          if [ -e "$TARGET/package-lock.json" ] || [ -e "$TARGET/npm-shrinkwrap.json" ] || [ -e "$TARGET/pnpm-lock.yaml" ] || [ -e "$TARGET/yarn.lock" ] || [ -e "$TARGET/bun.lock" ] || [ -e "$TARGET/bun.lockb" ]; then
+            echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ ! -f "$TARGET/package.json" ]; then
+            echo "::error::No package.json or lockfile found in '$TARGET'."
+            exit 1
+          fi
+          if [ -z "$PACKAGE" ]; then
+            SCRATCH="$RUNNER_TEMP/scan-community-node/lockfile"
+            rm -rf "$SCRATCH"
+            mkdir -p "$SCRATCH"
+            cp "$TARGET/package.json" "$SCRATCH/"
+            TARGET="$SCRATCH"
+          fi
+          (cd "$TARGET" && npm install --package-lock-only --ignore-scripts)
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
 
       - name: Run OSV-Scanner
         env:
-          TARGET: ${{ steps.fetch.outputs.path || github.workspace }}
+          TARGET: ${{ steps.resolve.outputs.target }}
         run: |
           set -euo pipefail
 
