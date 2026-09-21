@@ -1,0 +1,30 @@
+name: 'CI: Scan Community Node'
+
+# Exercises the scan-community-node reusable workflow on pull requests that
+# touch it: once against a published package and once against this repository.
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/scan-community-node*.yml'
+      - '.github/workflows/ci-scan-community-node.yml'
+      - 'scan-community-node/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    uses: $/.github/workflows/scan-community-node.yml
+    with:
+      package: n8n-nodes-evolution-api
+      version: 1.0.4
+
+  workspace:
+    uses: $/.github/workflows/scan-community-node.yml

@@ -1,0 +1,105 @@
+name: 'Scan Community Node (OSV-Scanner)'
+
+# One job of the scan-community-node reusable workflow. Called by
+# scan-community-node.yml; runnable on its own through workflow_dispatch.
+
+on:
+  workflow_call:
+    inputs: &inputs
+      package:
+        description: 'npm package name to scan (e.g. express or @scope/pkg). Leave empty to scan the calling repository.'
+        required: false
+        default: ''
+        type: string
+      version:
+        description: 'Version or dist-tag of the package to scan.'
+        required: false
+        default: 'latest'
+        type: string
+      upload-sarif:
+        description: 'Upload the SARIF report to GitHub code scanning when scanning the calling repository.'
+        required: false
+        default: true
+        type: boolean
+  workflow_dispatch:
+    inputs: *inputs
+
+env:
+  OSV_SCANNER_VERSION: 2.5.1
+  # SHA-256 of osv-scanner_linux_amd64; update when bumping the version.
+  OSV_SCANNER_SHA256: f9f25499a2c8cc367b3af45df2ea7eeca7fbccceab9c35079968f4b3652194be
+
+jobs:
+  osv-scanner:
+    name: OSV-Scanner
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - if: inputs.package == ''
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: $/scan-community-node/actions/setup
+        with:
+          package: ${{ inputs.package }}
+          version: ${{ inputs.version }}
+          node: 'true'
+
+      - id: fetch
+        if: inputs.package != ''
+        uses: $/scan-community-node/actions/fetch-package
+        with:
+          package: ${{ inputs.package }}
+          version: ${{ inputs.version }}
+
+      - name: Resolve package dependencies
+        if: inputs.package != ''
+        working-directory: ${{ steps.fetch.outputs.path }}
+        # A published package ships no lockfile; resolve one so OSV-Scanner
+        # sees the full dependency tree.
+        run: npm install --package-lock-only --ignore-scripts
+
+      - name: Run OSV-Scanner
+        env:
+          TARGET: ${{ steps.fetch.outputs.path || github.workspace }}
+        run: |
+          set -euo pipefail
+
+          BIN="$RUNNER_TEMP/osv-scanner"
+          curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64" -o "$BIN"
+          echo "${OSV_SCANNER_SHA256}  $BIN" | sha256sum -c -
+          chmod +x "$BIN"
+
+          # The binary is run directly rather than through
+          # google/osv-scanner-action so the exit code is visible: 1 means
+          # vulnerabilities were found, which is reported, not enforced.
+          # Anything else is a scanner failure.
+          set +e
+          "$BIN" --format=sarif --output-file=security.osv-scanner.sarif --recursive --allow-no-lockfiles "$TARGET"
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ] && [ "$code" -ne 1 ]; then
+            echo "::error::OSV-Scanner failed with exit code $code"
+            exit "$code"
+          fi
+
+      - name: Write OSV-Scanner summary
+        id: summary
+        if: always()
+        uses: $/scan-community-node/actions/security-summary
+        with:
+          scanner: OSV-Scanner
+          package: ${{ inputs.package }}
+          version: ${{ inputs.version }}
+          sarif: security.osv-scanner.sarif
+
+      - name: Upload OSV-Scanner SARIF file to GitHub
+        if: always()
+        uses: $/scan-community-node/actions/upload-security-sarif
+        with:
+          category: scan-community-node/osv-scanner
+          sarif: ${{ steps.summary.outputs.sarif }}
+          package: ${{ inputs.package }}
+          upload: ${{ inputs.upload-sarif }}

@@ -1,0 +1,38 @@
+name: Fetch package
+description: Download an npm package tarball and extract it outside the git tree.
+
+inputs:
+  package:
+    description: npm package name.
+    required: true
+  version:
+    description: Version or dist-tag of the package.
+    required: false
+    default: 'latest'
+
+outputs:
+  path:
+    description: Absolute path of the extracted package.
+    value: ${{ steps.fetch.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - id: fetch
+      shell: bash
+      env:
+        PACKAGE: ${{ inputs.package }}
+        VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        # Extract outside the git tree so an ignore file in the caller's
+        # checkout cannot hide files from the scanners.
+        TARGET="$RUNNER_TEMP/scan-community-node/package"
+        rm -rf "$TARGET"
+        mkdir -p "$TARGET"
+
+        TARBALL="$(npm pack "$PACKAGE@$VERSION" --pack-destination "$RUNNER_TEMP" --ignore-scripts --json | jq -r '.[0].filename')"
+        tar -xzf "$RUNNER_TEMP/$TARBALL" -C "$TARGET" --strip-components=1
+        rm -f "$RUNNER_TEMP/$TARBALL"
+
+        echo "path=$TARGET" >> "$GITHUB_OUTPUT"

@@ -1,0 +1,100 @@
+name: 'Scan Community Node (Gitleaks)'
+
+# One job of the scan-community-node reusable workflow. Called by
+# scan-community-node.yml; runnable on its own through workflow_dispatch.
+
+on:
+  workflow_call:
+    inputs: &inputs
+      package:
+        description: 'npm package name to scan (e.g. express or @scope/pkg). Leave empty to scan the calling repository.'
+        required: false
+        default: ''
+        type: string
+      version:
+        description: 'Version or dist-tag of the package to scan.'
+        required: false
+        default: 'latest'
+        type: string
+      upload-sarif:
+        description: 'Upload the SARIF report to GitHub code scanning when scanning the calling repository.'
+        required: false
+        default: true
+        type: boolean
+  workflow_dispatch:
+    inputs: *inputs
+
+env:
+  GITLEAKS_VERSION: 8.30.1
+  # SHA-256 of gitleaks_<version>_linux_x64.tar.gz; update when bumping the version.
+  GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+
+jobs:
+  gitleaks:
+    name: Gitleaks
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - if: inputs.package == ''
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: $/scan-community-node/actions/setup
+        with:
+          package: ${{ inputs.package }}
+          version: ${{ inputs.version }}
+          node: 'true'
+
+      - id: fetch
+        if: inputs.package != ''
+        uses: $/scan-community-node/actions/fetch-package
+        with:
+          package: ${{ inputs.package }}
+          version: ${{ inputs.version }}
+
+      - name: Run Gitleaks
+        env:
+          PACKAGE: ${{ inputs.package }}
+          TARGET: ${{ steps.fetch.outputs.path || github.workspace }}
+        run: |
+          set -euo pipefail
+
+          ARCHIVE="$RUNNER_TEMP/gitleaks.tar.gz"
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o "$ARCHIVE"
+          echo "${GITLEAKS_SHA256}  $ARCHIVE" | sha256sum -c -
+          tar -xzf "$ARCHIVE" -C "$RUNNER_TEMP" gitleaks
+          rm -f "$ARCHIVE"
+
+          FLAGS=()
+          if [ -n "$PACKAGE" ]; then
+            # A package must not be able to tune or suppress its own scan:
+            # drop its Gitleaks config and ignore list and disregard inline
+            # `gitleaks:allow` comments.
+            rm -f "$TARGET/.gitleaks.toml" "$TARGET/.gitleaksignore"
+            FLAGS+=(--ignore-gitleaks-allow)
+          fi
+
+          # Gitleaks exits 1 on findings by default. Findings are reported, not
+          # enforced; a real failure still exits non-zero.
+          "$RUNNER_TEMP/gitleaks" dir "$TARGET" "${FLAGS[@]}" --report-format sarif --report-path security.gitleaks.sarif --exit-code 0
+
+      - name: Write Gitleaks summary
+        id: summary
+        if: always()
+        uses: $/scan-community-node/actions/security-summary
+        with:
+          scanner: Gitleaks
+          package: ${{ inputs.package }}
+          version: ${{ inputs.version }}
+          sarif: security.gitleaks.sarif
+
+      - name: Upload Gitleaks SARIF file to GitHub
+        if: always()
+        uses: $/scan-community-node/actions/upload-security-sarif
+        with:
+          category: scan-community-node/gitleaks
+          sarif: ${{ steps.summary.outputs.sarif }}
+          package: ${{ inputs.package }}
+          upload: ${{ inputs.upload-sarif }}

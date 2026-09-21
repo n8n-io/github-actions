@@ -80,14 +80,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          # An action lives in <package>/action.yml; a reusable workflow in
-          # .github/workflows/<package>.yml with docs under <package>/.
+          # An action lives in <package>/action.yml. A reusable workflow lives
+          # in .github/workflows/<package>.yml, with any sub-workflows named
+          # <package>-*.yml and docs plus helpers under <package>/.
           if [ -f "$PACKAGE/action.yml" ]; then
             uses_path="$PACKAGE"
             paths="$PACKAGE"
           elif [ -f ".github/workflows/$PACKAGE.yml" ]; then
             uses_path=".github/workflows/$PACKAGE.yml"
-            paths=".github/workflows/$PACKAGE.yml $PACKAGE"
+            paths=".github/workflows/$PACKAGE.yml .github/workflows/$PACKAGE-*.yml $PACKAGE"
           else
             echo "::error::neither $PACKAGE/action.yml nor .github/workflows/$PACKAGE.yml found"
             exit 1
@@ -138,7 +139,7 @@ jobs:
         run: |
           set -euo pipefail
 
-          # shellcheck disable=SC2086 # PATHS is a space-separated list
+          # PATHS is a space-separated list of pathspecs; git expands the glob.
           {
             echo '```yaml'
             echo "- uses: ${{ github.repository }}/$USES_PATH@$SHA # v$VERSION"

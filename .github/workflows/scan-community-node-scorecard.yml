@@ -1,0 +1,80 @@
+name: 'Scan Community Node (OpenSSF Scorecard)'
+
+# One job of the scan-community-node reusable workflow. Called by
+# scan-community-node.yml; runnable on its own through workflow_dispatch.
+
+on:
+  workflow_call:
+    inputs: &inputs
+      package:
+        description: 'npm package name to scan (e.g. express or @scope/pkg). Leave empty to scan the calling repository.'
+        required: false
+        default: ''
+        type: string
+      upload-sarif:
+        description: 'Upload the SARIF report to GitHub code scanning when scanning the calling repository.'
+        required: false
+        default: true
+        type: boolean
+  workflow_dispatch:
+    inputs: *inputs
+
+jobs:
+  scorecard:
+    name: OpenSSF Scorecard
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - if: inputs.package == ''
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: $/scan-community-node/actions/setup
+        with:
+          package: ${{ inputs.package }}
+
+      - name: Run OpenSSF Scorecard (repository)
+        if: inputs.package == ''
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: security.scorecard.sarif
+          results_format: sarif
+          publish_results: false
+
+      - name: Run OpenSSF Scorecard (package)
+        if: inputs.package != ''
+        env:
+          PACKAGE: ${{ inputs.package }}
+          GITHUB_AUTH_TOKEN: ${{ github.token }}
+        run: |
+          # pipefail so a Scorecard failure is not masked by tee's exit code.
+          set -euo pipefail
+
+          # The scorecard CLI cannot emit SARIF for a package, so keep its
+          # native report. Scorecard scores the package's source repository on
+          # its default branch, not a release, so there is no version to pick.
+          docker run --rm -e GITHUB_AUTH_TOKEN \
+            ghcr.io/ossf/scorecard:v5.5.0@sha256:3f24714e9366917adb7a05635382c97dfecb14b21eaef3dfa2ea48c8e23e0795 \
+            --npm="$PACKAGE" --format=default | tee security.scorecard.txt
+
+      - name: Write Scorecard summary
+        id: summary
+        if: always()
+        uses: $/scan-community-node/actions/security-summary
+        with:
+          scanner: OpenSSF Scorecard
+          package: ${{ inputs.package }}
+          version: default branch
+          sarif: security.scorecard.sarif
+          text: security.scorecard.txt
+
+      - name: Upload Scorecard SARIF file to GitHub
+        if: always()
+        uses: $/scan-community-node/actions/upload-security-sarif
+        with:
+          category: scan-community-node/scorecard
+          sarif: ${{ steps.summary.outputs.sarif }}
+          package: ${{ inputs.package }}
+          upload: ${{ inputs.upload-sarif }}
