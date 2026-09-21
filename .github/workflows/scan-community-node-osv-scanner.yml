@@ -64,30 +64,39 @@ jobs:
           set -euo pipefail
 
           # A published package ships no lockfile, and a repository may not
-          # have one either. Without a lockfile OSV-Scanner would report a
-          # clean result while checking nothing, so resolve one. A repository
-          # gets it in a scratch copy so its checkout stays untouched.
+          # have one at its root either. Without a lockfile OSV-Scanner would
+          # report a clean result while checking nothing, so resolve one from
+          # the root package.json. A repository gets it in a scratch copy that
+          # is scanned in addition to the checkout, so nested lockfiles are
+          # still covered and the checkout stays untouched.
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
           if [ -e "$TARGET/package-lock.json" ] || [ -e "$TARGET/npm-shrinkwrap.json" ] || [ -e "$TARGET/pnpm-lock.yaml" ] || [ -e "$TARGET/yarn.lock" ] || [ -e "$TARGET/bun.lock" ] || [ -e "$TARGET/bun.lockb" ]; then
-            echo "target=$TARGET" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           if [ ! -f "$TARGET/package.json" ]; then
-            echo "::error::No package.json or lockfile found in '$TARGET'."
-            exit 1
+            if [ -n "$PACKAGE" ]; then
+              echo "::error::The package ships neither a package.json nor a lockfile."
+              exit 1
+            fi
+            # A repository without a root manifest may still hold nested
+            # packages; the recursive scan finds their lockfiles.
+            exit 0
           fi
-          if [ -z "$PACKAGE" ]; then
+          if [ -n "$PACKAGE" ]; then
+            (cd "$TARGET" && npm install --package-lock-only --ignore-scripts)
+          else
             SCRATCH="$RUNNER_TEMP/scan-community-node/lockfile"
             rm -rf "$SCRATCH"
             mkdir -p "$SCRATCH"
             cp "$TARGET/package.json" "$SCRATCH/"
-            TARGET="$SCRATCH"
+            (cd "$SCRATCH" && npm install --package-lock-only --ignore-scripts)
+            echo "extra=$SCRATCH" >> "$GITHUB_OUTPUT"
           fi
-          (cd "$TARGET" && npm install --package-lock-only --ignore-scripts)
-          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
 
       - name: Run OSV-Scanner
         env:
           TARGET: ${{ steps.resolve.outputs.target }}
+          EXTRA: ${{ steps.resolve.outputs.extra }}
         run: |
           set -euo pipefail
 
@@ -101,7 +110,7 @@ jobs:
           # vulnerabilities were found, which is reported, not enforced.
           # Anything else is a scanner failure.
           set +e
-          "$BIN" --format=sarif --output-file=security.osv-scanner.sarif --recursive --allow-no-lockfiles "$TARGET"
+          "$BIN" --format=sarif --output-file=security.osv-scanner.sarif --recursive --allow-no-lockfiles "$TARGET" ${EXTRA:+"$EXTRA"}
           code=$?
           set -e
           if [ "$code" -ne 0 ] && [ "$code" -ne 1 ]; then

@@ -102,9 +102,11 @@ Gitleaks, Scorecard and OSV-Scanner are pinned inside their workflows.
 - Semgrep runs with `--config auto`, which contacts the Semgrep registry to pick
   rules and sends anonymous metrics.
 - OSV-Scanner needs a lockfile to see the dependency tree. A published package
-  never ships one, and a repository may not either, so in both cases one is
-  resolved with `npm install --package-lock-only` first. For a repository this
-  happens in a scratch copy of its `package.json`; the checkout stays untouched.
+  never ships one, and a repository may not have one at its root, so in both
+  cases one is resolved from the root `package.json` with
+  `npm install --package-lock-only`. For a repository this happens in a scratch
+  copy that is scanned in addition to the checkout, so nested lockfiles are
+  still covered and the checkout stays untouched.
 - Report files `security.<scanner>.sarif` and `.txt` are removed before each
   scan, so a report checked into the repository cannot pass for a result.
 - Reports are written as `security.<scanner>.sarif` or `.txt` in the job's

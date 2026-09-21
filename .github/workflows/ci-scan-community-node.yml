@@ -31,6 +31,6 @@ jobs:
     with:
       # Semgrep's mutable-tag rule does not know `$/` and would flag every
       # self-reference in these workflows as an alert on this repo, so the
-      # self-test only verifies that the scans run. The upload path was
-      # verified once on this PR.
-      upload-sarif: false
+      # workspace run leaves Semgrep out (the package run still covers it) and
+      # keeps the SARIF upload on for the other scanners.
+      scanners: guarddog,scorecard,osv-scanner,gitleaks
