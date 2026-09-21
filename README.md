@@ -2,12 +2,12 @@
 
 Shared GitHub Actions used across `n8n-io` repositories.
 
-| Action | Description |
+| Component | Description |
 |--------|-------------|
 | [`cla-check`](./cla-check) | Verify every contributor on a PR has signed the n8n CLA |
 | [`scan-community-node`](./scan-community-node) | Reusable workflow: scan an npm package or the calling repo for malware, insecure code, misconfiguration, vulnerabilities and secrets |
 
-## Consuming an action
+## Consuming
 
 Reference the action by path, pinned to a commit SHA with the version in a
 trailing comment:

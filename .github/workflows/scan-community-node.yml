@@ -231,12 +231,17 @@ jobs:
           set -euo pipefail
 
           SARIF_PATH="$GITHUB_WORKSPACE/$SARIF"
+          FLAGS=()
           if [ -n "$PACKAGE" ]; then
-            # Disable Semgrep's default ignores so the shipped dist/ code is scanned.
+            # A package must not be able to tune or suppress its own scan:
+            # replace its ignore file (this also disables Semgrep's default
+            # ignores, so the shipped dist/ code is scanned) and disregard
+            # inline `nosemgrep` comments.
             : > "$TARGET/.semgrepignore"
+            FLAGS+=(--disable-nosem)
           fi
           cd "$TARGET"
-          uvx "semgrep@${SEMGREP_VERSION}" scan --config auto --sarif-output "$SARIF_PATH" .
+          uvx "semgrep@${SEMGREP_VERSION}" scan --config auto "${FLAGS[@]}" --sarif-output "$SARIF_PATH" .
 
       - name: Run OpenSSF Scorecard (repository)
         if: matrix.scanner == 'scorecard' && inputs.package == ''
@@ -312,9 +317,18 @@ jobs:
           tar -xzf "$ARCHIVE" -C "$RUNNER_TEMP" gitleaks
           rm -f "$ARCHIVE"
 
+          FLAGS=()
+          if [ -n "$PACKAGE" ]; then
+            # A package must not be able to tune or suppress its own scan:
+            # drop its Gitleaks config and ignore list and disregard inline
+            # `gitleaks:allow` comments.
+            rm -f "$TARGET/.gitleaks.toml" "$TARGET/.gitleaksignore"
+            FLAGS+=(--ignore-gitleaks-allow)
+          fi
+
           # Gitleaks exits 1 on findings by default. Findings are reported, not
           # enforced; a real failure still exits non-zero.
-          "$RUNNER_TEMP/gitleaks" dir "$TARGET" --report-format sarif --report-path "$SARIF" --exit-code 0
+          "$RUNNER_TEMP/gitleaks" dir "$TARGET" "${FLAGS[@]}" --report-format sarif --report-path "$SARIF" --exit-code 0
 
       - name: Write step summary
         id: report

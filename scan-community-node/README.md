@@ -73,8 +73,12 @@ Gitleaks, Scorecard and OSV-Scanner are pinned inside the workflow.
 
 - Pull requests from forks get a read-only `GITHUB_TOKEN`, so the SARIF upload
   would fail with 403 there, and Scorecard does not support forks. The workflow
-  detects fork PRs, skips the upload and drops the Scorecard job; the other
-  scanners still report to the step summary.
+  detects fork PRs, skips the upload and, for workspace scans, drops the
+  Scorecard job. The other scanners still report to the step summary.
+- A published package cannot tune or suppress its own scan. Its `.semgrepignore`,
+  `.gitleaks.toml` and `.gitleaksignore` are discarded and inline `nosemgrep` and
+  `gitleaks:allow` comments are ignored. Workspace scans honor the repository's
+  own configuration.
 - In workspace mode, Scorecard runs through `ossf/scorecard-action`, which
   supports `push` and `schedule` on the default branch. Upstream lists
   `pull_request` and `workflow_dispatch` as experimental.
