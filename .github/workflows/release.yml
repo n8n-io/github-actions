@@ -4,8 +4,9 @@ run-name: "Release: ${{ inputs.package }} (${{ inputs.bump }})${{ inputs.dry-run
 # Tags one action at a time. Tags are `<action>/vMAJOR.MINOR.PATCH`, so actions
 # version independently and a bump to one doesn't churn the others.
 #
-# Adding a new action means adding it to the `package` options below — CI fails
-# if a directory with an action.yml is missing from that list.
+# Adding a new action or reusable workflow means adding it to the `package`
+# options below — CI fails if a directory with an action.yml, or a workflow
+# with a `workflow_call` trigger, is missing from that list.
 
 on:
   workflow_dispatch:
@@ -79,8 +80,16 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ ! -f "$PACKAGE/action.yml" ]; then
-            echo "::error::$PACKAGE/action.yml not found"
+          # An action lives in <package>/action.yml; a reusable workflow in
+          # .github/workflows/<package>.yml with docs under <package>/.
+          if [ -f "$PACKAGE/action.yml" ]; then
+            uses_path="$PACKAGE"
+            paths="$PACKAGE"
+          elif [ -f ".github/workflows/$PACKAGE.yml" ]; then
+            uses_path=".github/workflows/$PACKAGE.yml"
+            paths=".github/workflows/$PACKAGE.yml $PACKAGE"
+          else
+            echo "::error::neither $PACKAGE/action.yml nor .github/workflows/$PACKAGE.yml found"
             exit 1
           fi
 
@@ -113,6 +122,8 @@ jobs:
             echo "tag=$tag"
             echo "version=$next"
             echo "prev_tag=${prev_version:+$PACKAGE/v$prev_version}"
+            echo "uses_path=$uses_path"
+            echo "paths=$paths"
           } >> "$GITHUB_OUTPUT"
 
       - name: Render release notes
@@ -121,26 +132,29 @@ jobs:
           PACKAGE: ${{ inputs.package }}
           VERSION: ${{ steps.version.outputs.version }}
           PREV_TAG: ${{ steps.version.outputs.prev_tag }}
+          USES_PATH: ${{ steps.version.outputs.uses_path }}
+          PATHS: ${{ steps.version.outputs.paths }}
           SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
 
+          # shellcheck disable=SC2086 # PATHS is a space-separated list
           {
             echo '```yaml'
-            echo "- uses: ${{ github.repository }}/$PACKAGE@$SHA # v$VERSION"
+            echo "- uses: ${{ github.repository }}/$USES_PATH@$SHA # v$VERSION"
             echo '```'
             echo
             echo "### Changes"
             echo
             if [ -n "$PREV_TAG" ]; then
-              git log "$PREV_TAG..HEAD" --no-merges --pretty='- %s (%h)' -- "$PACKAGE" > /tmp/commits
+              git log "$PREV_TAG..HEAD" --no-merges --pretty='- %s (%h)' -- $PATHS > /tmp/commits
             else
-              git log --no-merges --pretty='- %s (%h)' -- "$PACKAGE" > /tmp/commits
+              git log --no-merges --pretty='- %s (%h)' -- $PATHS > /tmp/commits
             fi
             if [ -s /tmp/commits ]; then
               cat /tmp/commits
             else
-              echo "- No commits touched \`$PACKAGE/\` since ${PREV_TAG:-the start of the repo}."
+              echo "- No commits touched \`$PACKAGE\` since ${PREV_TAG:-the start of the repo}."
             fi
             if [ -n "$PREV_TAG" ]; then
               echo

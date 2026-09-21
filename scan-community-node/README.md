@@ -1,33 +1,38 @@
 # scan-community-node
 
-Scans an npm package, or the `package.json` in the workspace, for security
-problems before it is trusted. Each run executes one scanner, chosen with the
-`scanner` input, and writes a summary to the job's step summary.
+Reusable workflow that scans an npm package, or the calling repository's
+`package.json`, for security problems before it is trusted. Each scanner runs
+as its own job, in parallel, and writes a summary to the run's step summary.
+
+The workflow file is [`.github/workflows/scan-community-node.yml`](../.github/workflows/scan-community-node.yml).
+Reusable workflows must live in that directory; this folder holds its
+documentation and the example caller.
 
 ## Scanners
 
-| `scanner` | Tool | Area of concern |
-|-----------|------|-----------------|
+| Job | Tool | Area of concern |
+|-----|------|-----------------|
 | `guarddog` | [GuardDog](https://github.com/DataDog/guarddog) | Malicious and supply-chain behavior (install scripts, obfuscation, exfiltration, typosquatting) |
 | `semgrep` | [Semgrep](https://github.com/semgrep/semgrep) | Insecure code patterns (static analysis) |
 | `scorecard` | [OpenSSF Scorecard](https://github.com/ossf/scorecard) | Security posture of the source repository (branch protection, pinned dependencies, CI hardening) |
 | `osv-scanner` | [OSV-Scanner](https://github.com/google/osv-scanner) | Known vulnerabilities in the dependency tree |
 | `gitleaks` | [Gitleaks](https://github.com/gitleaks/gitleaks) | Hardcoded secrets and leaked credentials |
 
-Every scanner reports; none of them fails the step on findings. The step only
-fails when a scanner cannot run.
+Every scanner reports; none of them fails its job on findings. A job fails
+only when a scanner cannot run.
 
 ## Two modes
 
 **Published package.** Set `package` (and optionally `version`) to download and
-scan an npm package. Nothing needs to be checked out. Findings show up in the
-step summary only: they belong to another project and are never uploaded to
-this repository's code scanning.
+scan an npm package. The calling repository is not checked out. Findings show
+up in the step summary only: they belong to another project and are never
+uploaded to the caller's code scanning.
 
-**Workspace.** Leave `package` empty to scan the caller's checkout. The SARIF
-report is uploaded to GitHub code scanning, so findings appear under
-**Security → Code scanning** next to CodeQL and other analyses. This needs
-`security-events: write`; set `upload-sarif: false` to skip the upload.
+**Workspace.** Leave `package` empty to scan the calling repository. The
+workflow checks it out and uploads the SARIF report to GitHub code scanning,
+so findings appear under **Security → Code scanning** next to CodeQL and other
+analyses. This needs `security-events: write` from the caller; set
+`upload-sarif: false` to skip the upload.
 
 Semgrep, OSV-Scanner and Gitleaks always emit SARIF. GuardDog and Scorecard do
 so only in workspace mode; for a package they produce their native text report.
@@ -36,47 +41,43 @@ so only in workspace mode; for a package they produce their native text report.
 
 Copy [`examples/ci-security-scan.yml`](./examples/ci-security-scan.yml) to
 `.github/workflows/ci-security-scan.yml` in the consuming repo and replace the
-pinned SHA. It runs the action in a matrix, one job per scanner, so the five
-scans run in parallel.
+pinned SHA:
 
-The caller owns checkout, triggers, `permissions`, `concurrency` and
-`timeout-minutes`. Composite actions cannot declare any of those.
+```yaml
+jobs:
+  scan:
+    uses: n8n-io/github-actions/.github/workflows/scan-community-node.yml@<sha> # v1.0.0
+    with:
+      package: ${{ inputs.package }}
+```
+
+The called workflow declares no `permissions`, so the caller's grant applies to
+its jobs: `contents: read` always, plus `security-events: write` for the SARIF
+upload in workspace mode. Triggers and `concurrency` are the caller's as well.
 
 ## Inputs
 
-| Input | Required | Default | Description |
-|-------|----------|---------|-------------|
-| `scanner` | yes | — | `guarddog`, `semgrep`, `scorecard`, `osv-scanner` or `gitleaks` |
-| `package` | no | — | npm package name, e.g. `express` or `@scope/pkg`. Empty scans the workspace |
-| `version` | no | `latest` | Version or dist-tag of `package`. Scorecard ignores it and scores the source repository |
-| `sandbox` | no | `true` | Run GuardDog package scans inside its kernel-level sandbox. Set to `false` where the sandbox is unavailable, such as local `act` runs |
-| `upload-sarif` | no | `true` | Upload the SARIF report to code scanning in workspace mode |
-| `guarddog-version` | no | `3.2.0` | GuardDog version, installed from PyPI with uvx |
-| `semgrep-version` | no | `1.177.0` | Semgrep version, installed from PyPI with uvx |
+| Input | Type | Default | Description |
+|-------|------|---------|-------------|
+| `package` | string | — | npm package name, e.g. `express` or `@scope/pkg`. Empty scans the calling repository |
+| `version` | string | `latest` | Version or dist-tag of `package`. Scorecard ignores it and scores the source repository |
+| `scanners` | string | all five | Comma-separated subset of `guarddog`, `semgrep`, `scorecard`, `osv-scanner`, `gitleaks` |
+| `sandbox` | boolean | `true` | Run GuardDog package scans inside its kernel-level sandbox. Set to `false` where the sandbox is unavailable, such as local `act` runs |
+| `upload-sarif` | boolean | `true` | Upload SARIF reports to code scanning in workspace mode |
+| `guarddog-version` | string | `3.2.0` | GuardDog version, installed from PyPI with uvx |
+| `semgrep-version` | string | `1.177.0` | Semgrep version, installed from PyPI with uvx |
 
-Gitleaks, Scorecard and OSV-Scanner are pinned inside the action.
-
-## Outputs
-
-| Output | Description |
-|--------|-------------|
-| `sarif` | Workspace-relative path to the SARIF report, empty when the scanner produced none |
-| `text` | Workspace-relative path to the native text report, for GuardDog and Scorecard package scans |
-
-Reports are written to `.scan-community-node/` in the workspace.
+Gitleaks, Scorecard and OSV-Scanner are pinned inside the workflow.
 
 ## Notes
 
-- Package scans with Semgrep, OSV-Scanner and Gitleaks set up Node.js 24 to
-  download the tarball with `npm`. GuardDog and Scorecard fetch the package
-  themselves.
 - Pull requests from forks get a read-only `GITHUB_TOKEN`, so the SARIF upload
-  fails with 403 there and Scorecard does not support forks. The example
-  workflow turns off `upload-sarif` and skips Scorecard for fork PRs; the other
+  would fail with 403 there, and Scorecard does not support forks. The workflow
+  detects fork PRs, skips the upload and drops the Scorecard job; the other
   scanners still report to the step summary.
 - In workspace mode, Scorecard runs through `ossf/scorecard-action`, which
   supports `push` and `schedule` on the default branch. Upstream lists
-  `pull_request` and `workflow_dispatch` as experimental and does not support
-  forks.
+  `pull_request` and `workflow_dispatch` as experimental.
 - Semgrep runs with `--config auto`, which contacts the Semgrep registry to pick
   rules and sends anonymous metrics.
+- Reports are written to `.scan-community-node/` in the job's workspace.

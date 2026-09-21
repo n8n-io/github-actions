@@ -4,14 +4,15 @@ run-name: "${{ inputs.package && format('CI: Security Scan ({0}@{1})', inputs.pa
 # Copy this file to .github/workflows/ci-security-scan.yml in the consuming repo
 # and replace the pinned SHA.
 #
-# On push and pull_request the repository's own package.json is scanned and the
-# SARIF reports land under Security → Code scanning. Dispatch the workflow with
-# a package name to scan a published community node instead; those findings
-# only appear in the job summaries.
+# On push, pull_request and schedule the repository's own package.json is
+# scanned and the SARIF reports land under Security → Code scanning. Dispatch
+# the workflow with a package name to scan a published community node instead;
+# those findings only appear in the job summaries.
 #
-# Scorecard's upstream action supports push and schedule on the default branch;
-# it lists pull_request as experimental. Drop `pull_request` or exclude the
-# scorecard job from it if that turns out to be noisy.
+# The called workflow declares no permissions, so the grant below is what its
+# jobs run with. `security-events: write` is only needed for the SARIF upload.
+# Pull requests from forks get a read-only token; the called workflow skips the
+# upload and Scorecard for those and still reports to the step summary.
 
 on:
   push:
@@ -30,6 +31,12 @@ on:
         required: false
         default: 'latest'
         type: string
+      scanners:
+        description: 'Scanner to run'
+        required: false
+        default: all
+        type: choice
+        options: [all, guarddog, semgrep, scorecard, osv-scanner, gitleaks]
 
 permissions:
   contents: read
@@ -41,32 +48,8 @@ concurrency:
 
 jobs:
   scan:
-    name: ${{ matrix.scanner }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    strategy:
-      fail-fast: false
-      matrix:
-        scanner: [guarddog, semgrep, scorecard, osv-scanner, gitleaks]
-    steps:
-      # A published package is downloaded by the action; only workspace scans
-      # need the checkout.
-      - if: inputs.package == ''
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          persist-credentials: false
-
-      # Pull requests from forks get a read-only GITHUB_TOKEN, so the SARIF
-      # upload would fail with 403 and Scorecard does not support forks at all.
-      # Those runs still scan and report to the step summary.
-      - id: fork
-        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
-        run: echo "fork=true" >> "$GITHUB_OUTPUT"
-
-      - if: matrix.scanner != 'scorecard' || steps.fork.outputs.fork != 'true'
-        uses: n8n-io/github-actions/scan-community-node@REPLACE_WITH_SHA # scan-community-node/v1.0.0
-        with:
-          scanner: ${{ matrix.scanner }}
-          package: ${{ inputs.package }}
-          version: ${{ inputs.version || 'latest' }}
-          upload-sarif: ${{ steps.fork.outputs.fork != 'true' }}
+    uses: n8n-io/github-actions/.github/workflows/scan-community-node.yml@REPLACE_WITH_SHA # v1.0.0
+    with:
+      package: ${{ inputs.package }}
+      version: ${{ inputs.version || 'latest' }}
+      scanners: ${{ (inputs.scanners == '' || inputs.scanners == 'all') && 'guarddog,semgrep,scorecard,osv-scanner,gitleaks' || inputs.scanners }}
