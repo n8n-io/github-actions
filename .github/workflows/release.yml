@@ -16,6 +16,7 @@ on:
         type: choice
         options:
           - cla-check
+          - scan-community-node
       bump:
         description: 'Version bump (first release of an action is always v1.0.0)'
         required: true

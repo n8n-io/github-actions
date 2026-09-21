@@ -1,0 +1,339 @@
+name: 'Scan Community Node'
+description: 'Scan an npm package, or the package.json in the workspace, for malware, insecure code, misconfiguration, known vulnerabilities and leaked secrets'
+author: 'n8n'
+
+# One scanner per invocation, chosen with the `scanner` input. Run the action in
+# a matrix job to scan with all of them in parallel — see
+# examples/ci-security-scan.yml.
+#
+# With `package` set, the published npm package is downloaded and scanned, and
+# nothing needs to be checked out. Without it, the caller's checkout is scanned
+# and the SARIF report is uploaded to GitHub code scanning.
+#
+# Every scanner reports; none of them fails the step on findings. The caller
+# owns checkout, triggers, permissions and timeout-minutes — composite actions
+# cannot declare those.
+
+inputs:
+  scanner:
+    description: 'Scanner to run: guarddog, semgrep, scorecard, osv-scanner or gitleaks'
+    required: true
+  package:
+    description: 'npm package name to scan (e.g. express or @scope/pkg). Leave empty to scan the checkout in the workspace.'
+    required: false
+    default: ''
+  version:
+    description: 'Version or dist-tag of `package` to scan. Ignored by scorecard, which scores the source repository.'
+    required: false
+    default: 'latest'
+  sandbox:
+    description: 'Run GuardDog package scans inside its kernel-level sandbox. Set to false where the sandbox is unavailable, such as local act runs.'
+    required: false
+    default: 'true'
+  upload-sarif:
+    description: 'Upload the SARIF report to GitHub code scanning. Only applies when scanning the workspace; findings of a third-party package are never uploaded. Needs `security-events: write`.'
+    required: false
+    default: 'true'
+  guarddog-version:
+    description: 'GuardDog version, installed from PyPI with uvx'
+    required: false
+    default: '3.2.0'
+  semgrep-version:
+    description: 'Semgrep version, installed from PyPI with uvx'
+    required: false
+    default: '1.177.0'
+
+outputs:
+  sarif:
+    description: 'Workspace-relative path to the SARIF report, empty when the scanner produced none'
+    value: ${{ steps.report.outputs.sarif }}
+  text:
+    description: 'Workspace-relative path to the native text report, for scanners that cannot emit SARIF for a package'
+    value: ${{ steps.report.outputs.text }}
+
+runs:
+  using: composite
+  steps:
+    - name: Validate inputs
+      id: prepare
+      shell: bash
+      env:
+        SCANNER: ${{ inputs.scanner }}
+        PACKAGE: ${{ inputs.package }}
+        VERSION: ${{ inputs.version }}
+        GUARDDOG_VERSION: ${{ inputs.guarddog-version }}
+        SEMGREP_VERSION: ${{ inputs.semgrep-version }}
+      run: |
+        set -euo pipefail
+
+        case "$SCANNER" in
+          guarddog|semgrep|scorecard|osv-scanner|gitleaks) ;;
+          *)
+            echo "::error::scanner must be one of guarddog, semgrep, scorecard, osv-scanner or gitleaks, got '$SCANNER'"
+            exit 1 ;;
+        esac
+
+        # The inputs are spliced into command lines. Restrict them to what npm
+        # and PyPI accept so they cannot turn into options or point uvx at a
+        # different package.
+        if [ -n "$PACKAGE" ] && [[ ! "$PACKAGE" =~ ^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$ ]]; then
+          echo "::error::package must be an npm package name, got '$PACKAGE'"
+          exit 1
+        fi
+        if [[ ! "$VERSION" =~ ^[A-Za-z0-9][A-Za-z0-9._+-]*$ ]]; then
+          echo "::error::version must be a version or dist-tag, got '$VERSION'"
+          exit 1
+        fi
+        for v in "$GUARDDOG_VERSION" "$SEMGREP_VERSION"; do
+          if [[ ! "$v" =~ ^[0-9][A-Za-z0-9.+-]*$ ]]; then
+            echo "::error::guarddog-version and semgrep-version must be version strings, got '$v'"
+            exit 1
+          fi
+        done
+
+        # Reports live in the workspace because the Scorecard and OSV-Scanner
+        # actions run in Docker and only see that directory. Paths stay
+        # workspace-relative so the same value works on the host and in the
+        # container.
+        WORK=.scan-community-node
+        mkdir -p "$WORK"
+        {
+          echo "work=$WORK"
+          echo "sarif=$WORK/$SCANNER.sarif"
+          echo "text=$WORK/$SCANNER.txt"
+          echo "spec=$PACKAGE@$VERSION"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Set up Node.js
+      # npm downloads the package tarball and, for OSV-Scanner, resolves a
+      # lockfile. GuardDog and Scorecard fetch the package themselves.
+      if: inputs.package != '' && inputs.scanner != 'guarddog' && inputs.scanner != 'scorecard'
+      uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      with:
+        node-version: 24
+
+    - name: Set up uv
+      uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      with:
+        enable-cache: false
+
+    - name: Download package
+      id: package
+      if: inputs.package != '' && inputs.scanner != 'guarddog' && inputs.scanner != 'scorecard'
+      shell: bash
+      env:
+        SCANNER: ${{ inputs.scanner }}
+        SPEC: ${{ steps.prepare.outputs.spec }}
+        WORK: ${{ steps.prepare.outputs.work }}
+      run: |
+        set -euo pipefail
+
+        # OSV-Scanner runs in Docker and only sees the workspace. Semgrep and
+        # Gitleaks get the package outside the git tree instead, so an ignore
+        # file in the caller's checkout cannot hide files from them.
+        if [ "$SCANNER" = osv-scanner ]; then
+          TARGET="$WORK/package"
+        else
+          TARGET="$RUNNER_TEMP/scan-community-node/package"
+        fi
+        rm -rf "$TARGET"
+        mkdir -p "$TARGET"
+
+        TARBALL="$(npm pack "$SPEC" --pack-destination "$RUNNER_TEMP" --ignore-scripts --json | jq -r '.[0].filename')"
+        tar -xzf "$RUNNER_TEMP/$TARBALL" -C "$TARGET" --strip-components=1
+        rm -f "$RUNNER_TEMP/$TARBALL"
+
+        echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+
+    - name: Run GuardDog
+      if: inputs.scanner == 'guarddog'
+      shell: bash
+      env:
+        PACKAGE: ${{ inputs.package }}
+        VERSION: ${{ inputs.version }}
+        SANDBOX: ${{ inputs.sandbox }}
+        GUARDDOG_VERSION: ${{ inputs.guarddog-version }}
+        SARIF: ${{ steps.prepare.outputs.sarif }}
+        TEXT: ${{ steps.prepare.outputs.text }}
+      run: |
+        # pipefail so a GuardDog failure is not masked by tee's exit code.
+        set -euo pipefail
+
+        if [ -n "$PACKAGE" ]; then
+          # `guarddog npm scan` cannot emit SARIF, so keep its native report.
+          # Only `scan` runs the package inside a sandbox; `verify` has no such
+          # option.
+          FLAGS=()
+          if [ "$SANDBOX" = "false" ]; then
+            FLAGS+=(--no-sandbox)
+          fi
+          if [ "$VERSION" != "latest" ]; then
+            FLAGS+=(--version "$VERSION")
+          fi
+          uvx "guarddog@${GUARDDOG_VERSION}" npm scan "${FLAGS[@]}" "$PACKAGE" | tee "$TEXT"
+        else
+          uvx "guarddog@${GUARDDOG_VERSION}" npm verify --output-format sarif package.json > "$SARIF"
+        fi
+
+    - name: Run Semgrep
+      if: inputs.scanner == 'semgrep'
+      shell: bash
+      env:
+        PACKAGE: ${{ inputs.package }}
+        SEMGREP_VERSION: ${{ inputs.semgrep-version }}
+        TARGET: ${{ steps.package.outputs.target || github.workspace }}
+        SARIF: ${{ github.workspace }}/${{ steps.prepare.outputs.sarif }}
+      run: |
+        set -euo pipefail
+
+        if [ -n "$PACKAGE" ]; then
+          # Disable Semgrep's default ignores so the shipped dist/ code is scanned.
+          : > "$TARGET/.semgrepignore"
+        fi
+        cd "$TARGET"
+        uvx "semgrep@${SEMGREP_VERSION}" scan --config auto --sarif-output "$SARIF" .
+
+    - name: Run OpenSSF Scorecard (repository)
+      if: inputs.scanner == 'scorecard' && inputs.package == ''
+      uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+      with:
+        results_file: ${{ steps.prepare.outputs.sarif }}
+        results_format: sarif
+        publish_results: false
+
+    - name: Run OpenSSF Scorecard (package)
+      if: inputs.scanner == 'scorecard' && inputs.package != ''
+      shell: bash
+      env:
+        PACKAGE: ${{ inputs.package }}
+        GITHUB_AUTH_TOKEN: ${{ github.token }}
+        TEXT: ${{ steps.prepare.outputs.text }}
+      run: |
+        # pipefail so a Scorecard failure is not masked by tee's exit code.
+        set -euo pipefail
+
+        # The scorecard CLI cannot emit SARIF for a package, so keep its native
+        # report. Scorecard scores the package's source repository on its
+        # default branch, not a release, so `version` does not apply.
+        docker run --rm -e GITHUB_AUTH_TOKEN \
+          ghcr.io/ossf/scorecard:v5.5.0 \
+          --npm="$PACKAGE" --format=default | tee "$TEXT"
+
+    - name: Resolve package dependencies
+      if: inputs.scanner == 'osv-scanner' && inputs.package != ''
+      shell: bash
+      working-directory: ${{ steps.package.outputs.target }}
+      # A published package ships no lockfile; resolve one so OSV-Scanner sees
+      # the full dependency tree.
+      run: npm install --package-lock-only --ignore-scripts
+
+    - name: Run OSV-Scanner
+      if: inputs.scanner == 'osv-scanner'
+      # OSV-Scanner exits non-zero when it finds vulnerabilities. Findings are
+      # reported, not enforced.
+      continue-on-error: true
+      uses: google/osv-scanner-action/osv-scanner-action@6e4298ebc4db23e847df9b2e2de2939d6f066c67 # v2.5.1
+      with:
+        scan-args: |-
+          --format=sarif
+          --output=${{ steps.prepare.outputs.sarif }}
+          --recursive
+          --allow-no-lockfiles
+          ${{ steps.package.outputs.target || './' }}
+
+    - name: Run Gitleaks
+      if: inputs.scanner == 'gitleaks'
+      shell: bash
+      env:
+        GITLEAKS_VERSION: 8.30.1
+        # SHA-256 of gitleaks_<version>_linux_x64.tar.gz; update when bumping the version.
+        GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        TARGET: ${{ steps.package.outputs.target || github.workspace }}
+        SARIF: ${{ steps.prepare.outputs.sarif }}
+      run: |
+        set -euo pipefail
+
+        ARCHIVE="$RUNNER_TEMP/gitleaks.tar.gz"
+        curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o "$ARCHIVE"
+        echo "${GITLEAKS_SHA256}  $ARCHIVE" | sha256sum -c -
+        tar -xzf "$ARCHIVE" -C "$RUNNER_TEMP" gitleaks
+        rm -f "$ARCHIVE"
+
+        # Gitleaks exits 1 on findings by default. Findings are reported, not
+        # enforced; a real failure still exits non-zero.
+        "$RUNNER_TEMP/gitleaks" dir "$TARGET" --report-format sarif --report-path "$SARIF" --exit-code 0
+
+    - name: Write step summary
+      id: report
+      if: always()
+      shell: bash
+      env:
+        SCANNER: ${{ inputs.scanner }}
+        PACKAGE: ${{ inputs.package }}
+        VERSION: ${{ inputs.version }}
+        SARIF: ${{ steps.prepare.outputs.sarif }}
+        TEXT: ${{ steps.prepare.outputs.text }}
+      run: |
+        set -euo pipefail
+
+        if [ -n "$PACKAGE" ]; then
+          TARGET="$PACKAGE@$VERSION"
+        else
+          TARGET="the workspace"
+        fi
+
+        if [ -s "$SARIF" ]; then
+          SRC=sarif
+          echo "sarif=$SARIF" >> "$GITHUB_OUTPUT"
+        elif [ -s "$TEXT" ]; then
+          SRC=text
+          echo "text=$TEXT" >> "$GITHUB_OUTPUT"
+        else
+          {
+            echo "## $SCANNER: $TARGET"
+            echo ""
+            echo "The scanner produced no report. See the step log."
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+        fi
+
+        REPORT="$(mktemp)"
+        if [ "$SRC" = sarif ]; then
+          uvx --from sarif-tools@3.0.5 sarif summary "$SARIF" > "$REPORT"
+          # summary abbreviates each rule, so append the full per-finding CSV.
+          CSV="$(mktemp -u).csv"
+          uvx --from sarif-tools@3.0.5 sarif csv -o "$CSV" "$SARIF" >/dev/null
+          echo >> "$REPORT"
+          # CSV always has a header row; more lines mean actual findings.
+          if [ "$(wc -l < "$CSV")" -gt 1 ]; then
+            cat "$CSV" >> "$REPORT"
+          else
+            echo 'No findings.' >> "$REPORT"
+          fi
+          rm -f "$CSV"
+        else
+          cat "$TEXT" > "$REPORT"
+        fi
+
+        # Escape leading backticks so untrusted scan output cannot close the
+        # code fence and inject markdown into the step summary.
+        sed -i 's/^`/\\`/' "$REPORT"
+        {
+          echo "## $SCANNER: $TARGET"
+          echo ""
+          echo '```'
+          cat "$REPORT"
+          # Newline so output without a trailing one does not glue to the fence.
+          echo
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+        rm -f "$REPORT"
+
+    - name: Upload SARIF to GitHub code scanning
+      # Findings of a third-party package are not this repository's and would
+      # pollute its Security tab, so only workspace scans are uploaded.
+      if: always() && inputs.package == '' && inputs.upload-sarif == 'true' && steps.report.outputs.sarif != ''
+      uses: github/codeql-action/upload-sarif@b96794f015dfd88f77b49b1c93e0fa7110f94c63 # v4.38.0
+      with:
+        category: scan-community-node/${{ inputs.scanner }}
+        sarif_file: ${{ steps.report.outputs.sarif }}
