@@ -70,6 +70,10 @@ Reports are written to `.scan-community-node/` in the workspace.
 - Package scans with Semgrep, OSV-Scanner and Gitleaks set up Node.js 24 to
   download the tarball with `npm`. GuardDog and Scorecard fetch the package
   themselves.
+- Pull requests from forks get a read-only `GITHUB_TOKEN`, so the SARIF upload
+  fails with 403 there and Scorecard does not support forks. The example
+  workflow turns off `upload-sarif` and skips Scorecard for fork PRs; the other
+  scanners still report to the step summary.
 - In workspace mode, Scorecard runs through `ossf/scorecard-action`, which
   supports `push` and `schedule` on the default branch. Upstream lists
   `pull_request` and `workflow_dispatch` as experimental and does not support

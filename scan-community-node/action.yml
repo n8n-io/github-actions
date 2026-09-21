@@ -91,10 +91,9 @@ runs:
           fi
         done
 
-        # Reports live in the workspace because the Scorecard and OSV-Scanner
-        # actions run in Docker and only see that directory. Paths stay
-        # workspace-relative so the same value works on the host and in the
-        # container.
+        # Reports live in the workspace because the Scorecard action runs in
+        # Docker and only sees that directory. Paths stay workspace-relative so
+        # the same value works on the host and in the container.
         WORK=.scan-community-node
         mkdir -p "$WORK"
         {
@@ -122,20 +121,13 @@ runs:
       if: inputs.package != '' && inputs.scanner != 'guarddog' && inputs.scanner != 'scorecard'
       shell: bash
       env:
-        SCANNER: ${{ inputs.scanner }}
         SPEC: ${{ steps.prepare.outputs.spec }}
-        WORK: ${{ steps.prepare.outputs.work }}
       run: |
         set -euo pipefail
 
-        # OSV-Scanner runs in Docker and only sees the workspace. Semgrep and
-        # Gitleaks get the package outside the git tree instead, so an ignore
-        # file in the caller's checkout cannot hide files from them.
-        if [ "$SCANNER" = osv-scanner ]; then
-          TARGET="$WORK/package"
-        else
-          TARGET="$RUNNER_TEMP/scan-community-node/package"
-        fi
+        # Extract outside the git tree so an ignore file in the caller's
+        # checkout cannot hide files from the scanners.
+        TARGET="$RUNNER_TEMP/scan-community-node/package"
         rm -rf "$TARGET"
         mkdir -p "$TARGET"
 
@@ -216,7 +208,7 @@ runs:
         # report. Scorecard scores the package's source repository on its
         # default branch, not a release, so `version` does not apply.
         docker run --rm -e GITHUB_AUTH_TOKEN \
-          ghcr.io/ossf/scorecard:v5.5.0 \
+          ghcr.io/ossf/scorecard:v5.5.0@sha256:3f24714e9366917adb7a05635382c97dfecb14b21eaef3dfa2ea48c8e23e0795 \
           --npm="$PACKAGE" --format=default | tee "$TEXT"
 
     - name: Resolve package dependencies
@@ -229,17 +221,32 @@ runs:
 
     - name: Run OSV-Scanner
       if: inputs.scanner == 'osv-scanner'
-      # OSV-Scanner exits non-zero when it finds vulnerabilities. Findings are
-      # reported, not enforced.
-      continue-on-error: true
-      uses: google/osv-scanner-action/osv-scanner-action@6e4298ebc4db23e847df9b2e2de2939d6f066c67 # v2.5.1
-      with:
-        scan-args: |-
-          --format=sarif
-          --output=${{ steps.prepare.outputs.sarif }}
-          --recursive
-          --allow-no-lockfiles
-          ${{ steps.package.outputs.target || './' }}
+      shell: bash
+      env:
+        OSV_SCANNER_VERSION: 2.5.1
+        # SHA-256 of osv-scanner_linux_amd64; update when bumping the version.
+        OSV_SCANNER_SHA256: f9f25499a2c8cc367b3af45df2ea7eeca7fbccceab9c35079968f4b3652194be
+        TARGET: ${{ steps.package.outputs.target || github.workspace }}
+        SARIF: ${{ steps.prepare.outputs.sarif }}
+      run: |
+        set -euo pipefail
+
+        BIN="$RUNNER_TEMP/osv-scanner"
+        curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64" -o "$BIN"
+        echo "${OSV_SCANNER_SHA256}  $BIN" | sha256sum -c -
+        chmod +x "$BIN"
+
+        # The binary is run directly rather than through google/osv-scanner-action
+        # so the exit code is visible: 1 means vulnerabilities were found, which
+        # is reported, not enforced. Anything else is a scanner failure.
+        set +e
+        "$BIN" --format=sarif --output-file="$SARIF" --recursive --allow-no-lockfiles "$TARGET"
+        code=$?
+        set -e
+        if [ "$code" -ne 0 ] && [ "$code" -ne 1 ]; then
+          echo "::error::OSV-Scanner failed with exit code $code"
+          exit "$code"
+        fi
 
     - name: Run Gitleaks
       if: inputs.scanner == 'gitleaks'

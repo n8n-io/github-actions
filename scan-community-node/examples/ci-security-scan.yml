@@ -56,8 +56,17 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: n8n-io/github-actions/scan-community-node@REPLACE_WITH_SHA # scan-community-node/v1.0.0
+      # Pull requests from forks get a read-only GITHUB_TOKEN, so the SARIF
+      # upload would fail with 403 and Scorecard does not support forks at all.
+      # Those runs still scan and report to the step summary.
+      - id: fork
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository
+        run: echo "fork=true" >> "$GITHUB_OUTPUT"
+
+      - if: matrix.scanner != 'scorecard' || steps.fork.outputs.fork != 'true'
+        uses: n8n-io/github-actions/scan-community-node@REPLACE_WITH_SHA # scan-community-node/v1.0.0
         with:
           scanner: ${{ matrix.scanner }}
           package: ${{ inputs.package }}
           version: ${{ inputs.version || 'latest' }}
+          upload-sarif: ${{ steps.fork.outputs.fork != 'true' }}
