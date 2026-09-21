@@ -206,6 +206,9 @@ jobs:
           # pipefail so a GuardDog failure is not masked by tee's exit code.
           set -euo pipefail
 
+          # GuardDog exits 0 on findings unless --exit-non-zero-on-finding is
+          # passed, which this workflow does not do. A non-zero exit therefore
+          # means the scanner itself failed, and the step fails with it.
           if [ -n "$PACKAGE" ]; then
             # `guarddog npm scan` cannot emit SARIF, so keep its native report.
             # Only `scan` runs the package inside a sandbox; `verify` has no
@@ -241,7 +244,19 @@ jobs:
             FLAGS+=(--disable-nosem)
           fi
           cd "$TARGET"
+
+          # Semgrep exits 0 on findings unless --error is passed, which this
+          # workflow does not do. Exit code 1 is still treated as findings so
+          # the report-only contract holds if that default ever changes;
+          # anything else is a scanner failure.
+          set +e
           uvx "semgrep@${SEMGREP_VERSION}" scan --config auto "${FLAGS[@]}" --sarif-output "$SARIF_PATH" .
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ] && [ "$code" -ne 1 ]; then
+            echo "::error::Semgrep failed with exit code $code"
+            exit "$code"
+          fi
 
       - name: Run OpenSSF Scorecard (repository)
         if: matrix.scanner == 'scorecard' && inputs.package == ''
