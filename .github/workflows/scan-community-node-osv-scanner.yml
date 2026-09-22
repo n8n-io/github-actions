@@ -24,10 +24,11 @@ on:
   workflow_dispatch:
     inputs: *inputs
 
-# The caller's grant is the ceiling: a workspace scan needs
-# `security-events: write` from it for the SARIF upload.
-permissions:
-  contents: read
+# No `permissions` block on purpose. A called workflow cannot declare more
+# than the caller granted: GitHub rejects the whole run at startup with
+# "The nested job ... is requesting 'security-events: write', but is only
+# allowed 'security-events: none'", even for jobs that would be skipped. So
+# the caller's grant applies unchanged; see scan-community-node/README.md.
 
 env:
   OSV_SCANNER_VERSION: 2.5.1
@@ -36,9 +37,6 @@ env:
 
 jobs:
   osv-scanner:
-    permissions:
-      contents: read
-      security-events: write
     name: OSV-Scanner
     runs-on: ubuntu-latest
     timeout-minutes: 15

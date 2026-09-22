@@ -13,9 +13,12 @@ name: 'Scan Community Node'
 # Every scanner reports; none of them fails its job on findings. A job fails
 # only when a scanner cannot run.
 #
-# The caller's grant is the ceiling for every job below. A package scan runs
-# with `contents: read`; a workspace scan also needs `security-events: write`
-# for the SARIF upload. See scan-community-node/examples/ci-security-scan.yml.
+# The caller's grant applies unchanged to every job below: `contents: read`
+# for a package scan, plus `security-events: write` for the SARIF upload in
+# workspace mode. Nothing here declares `permissions`, because a called
+# workflow that asks for more than the caller granted fails the whole run at
+# startup, even for jobs that would be skipped. See
+# scan-community-node/examples/ci-security-scan.yml.
 
 on:
   workflow_call:
@@ -57,9 +60,6 @@ on:
         type: string
   workflow_dispatch:
     inputs: *inputs
-
-permissions:
-  contents: read
 
 jobs:
   prepare:
@@ -142,9 +142,6 @@ jobs:
 
   scan-for-malware:
     needs: prepare
-    permissions:
-      contents: read
-      security-events: write
     if: contains(needs.prepare.outputs.scanners, ',guarddog,')
     uses: $/.github/workflows/scan-community-node-guarddog.yml
     with:
@@ -156,9 +153,6 @@ jobs:
 
   scan-for-insecure-code:
     needs: prepare
-    permissions:
-      contents: read
-      security-events: write
     if: contains(needs.prepare.outputs.scanners, ',semgrep,')
     uses: $/.github/workflows/scan-community-node-semgrep.yml
     with:
@@ -169,9 +163,6 @@ jobs:
 
   scan-for-misconfiguration:
     needs: prepare
-    permissions:
-      contents: read
-      security-events: write
     if: contains(needs.prepare.outputs.scanners, ',scorecard,')
     uses: $/.github/workflows/scan-community-node-scorecard.yml
     with:
@@ -180,9 +171,6 @@ jobs:
 
   scan-for-vulnerabilities:
     needs: prepare
-    permissions:
-      contents: read
-      security-events: write
     if: contains(needs.prepare.outputs.scanners, ',osv-scanner,')
     uses: $/.github/workflows/scan-community-node-osv-scanner.yml
     with:
@@ -192,9 +180,6 @@ jobs:
 
   scan-for-secrets:
     needs: prepare
-    permissions:
-      contents: read
-      security-events: write
     if: contains(needs.prepare.outputs.scanners, ',gitleaks,')
     uses: $/.github/workflows/scan-community-node-gitleaks.yml
     with:

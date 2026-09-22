@@ -9,10 +9,11 @@ run-name: "${{ inputs.package && format('CI: Security Scan ({0}@{1})', inputs.pa
 # the workflow with a package name to scan a published community node instead;
 # those findings only appear in the job summaries.
 #
-# The grant below is the ceiling for the called jobs. `security-events: write`
-# is only needed for the SARIF upload in workspace mode. Pull requests from
-# forks get a read-only token; the called workflow skips the upload and
-# Scorecard for those and still reports to the step summary.
+# The called workflows declare no permissions, so the grant below is what
+# their jobs run with. `security-events: write` is only needed for the SARIF
+# upload in workspace mode. Pull requests from forks get a read-only token;
+# the called workflow skips the upload and Scorecard for those and still
+# reports to the step summary.
 
 on:
   push:

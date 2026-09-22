@@ -33,8 +33,18 @@ jobs:
       security-events: write
     uses: $/.github/workflows/scan-community-node.yml
     with:
-      # Semgrep's mutable-tag rule does not know `$/` and would flag every
-      # self-reference in these workflows as an alert on this repo, so the
-      # workspace run leaves Semgrep out (the package run still covers it) and
-      # keeps the SARIF upload on for the other scanners.
-      scanners: guarddog,scorecard,osv-scanner,gitleaks
+      # Semgrep and Scorecard do not know `$/` and would flag every
+      # self-reference in these workflows as an unpinned action, and Scorecard
+      # also wants top-level permissions on the called workflows, which they
+      # cannot declare. Uploading their SARIF would fail this repo's code
+      # scanning check, so this job covers the upload path with the other three
+      # scanners. The package job still runs Semgrep and Scorecard.
+      scanners: guarddog,osv-scanner,gitleaks
+
+  # Scorecard in workspace mode, without the upload, so the scorecard-action
+  # path stays exercised.
+  workspace-scorecard:
+    uses: $/.github/workflows/scan-community-node.yml
+    with:
+      scanners: scorecard
+      upload-sarif: false

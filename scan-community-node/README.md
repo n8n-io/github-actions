@@ -67,9 +67,14 @@ jobs:
       package: ${{ inputs.package }}
 ```
 
-The caller's grant is the ceiling for the called jobs. A package scan runs
-with `contents: read`; a workspace scan also needs `security-events: write`
-for the SARIF upload. Triggers and `concurrency` are the caller's as well.
+The called workflows declare no `permissions`, so the caller's grant applies
+unchanged: `contents: read` for a package scan, plus `security-events: write`
+for the SARIF upload in workspace mode. They cannot declare it themselves: a
+called workflow that asks for more than the caller granted fails the run at
+startup, even for jobs that would be skipped, which would break every caller
+that only scans packages. Scorecard's Token-Permissions check flags this as
+missing top-level permissions; that is a known limitation of the check with
+reusable workflows. Triggers and `concurrency` are the caller's as well.
 
 ## Inputs
 
