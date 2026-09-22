@@ -24,6 +24,11 @@ on:
   workflow_dispatch:
     inputs: *inputs
 
+# The caller's grant is the ceiling: a workspace scan needs
+# `security-events: write` from it for the SARIF upload.
+permissions:
+  contents: read
+
 env:
   GITLEAKS_VERSION: 8.30.1
   # SHA-256 of gitleaks_<version>_linux_x64.tar.gz; update when bumping the version.
@@ -31,6 +36,9 @@ env:
 
 jobs:
   gitleaks:
+    permissions:
+      contents: read
+      security-events: write
     name: Gitleaks
     runs-on: ubuntu-latest
     timeout-minutes: 15

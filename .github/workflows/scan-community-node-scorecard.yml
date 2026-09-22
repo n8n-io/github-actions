@@ -19,8 +19,16 @@ on:
   workflow_dispatch:
     inputs: *inputs
 
+# The caller's grant is the ceiling: a workspace scan needs
+# `security-events: write` from it for the SARIF upload.
+permissions:
+  contents: read
+
 jobs:
   scorecard:
+    permissions:
+      contents: read
+      security-events: write
     name: OpenSSF Scorecard
     runs-on: ubuntu-latest
     timeout-minutes: 15

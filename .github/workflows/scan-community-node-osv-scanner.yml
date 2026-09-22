@@ -24,6 +24,11 @@ on:
   workflow_dispatch:
     inputs: *inputs
 
+# The caller's grant is the ceiling: a workspace scan needs
+# `security-events: write` from it for the SARIF upload.
+permissions:
+  contents: read
+
 env:
   OSV_SCANNER_VERSION: 2.5.1
   # SHA-256 of osv-scanner_linux_amd64; update when bumping the version.
@@ -31,6 +36,9 @@ env:
 
 jobs:
   osv-scanner:
+    permissions:
+      contents: read
+      security-events: write
     name: OSV-Scanner
     runs-on: ubuntu-latest
     timeout-minutes: 15

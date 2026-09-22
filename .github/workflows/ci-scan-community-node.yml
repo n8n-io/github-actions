@@ -13,13 +13,14 @@ on:
 
 permissions:
   contents: read
-  security-events: write
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # Called with a read-only token, as a consumer that only scans packages
+  # would do.
   package:
     uses: $/.github/workflows/scan-community-node.yml
     with:
@@ -27,6 +28,9 @@ jobs:
       version: 1.0.4
 
   workspace:
+    permissions:
+      contents: read
+      security-events: write
     uses: $/.github/workflows/scan-community-node.yml
     with:
       # Semgrep's mutable-tag rule does not know `$/` and would flag every

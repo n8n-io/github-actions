@@ -67,10 +67,9 @@ jobs:
       package: ${{ inputs.package }}
 ```
 
-The called workflows declare no `permissions`, so the caller's grant applies
-to their jobs: `contents: read` always, plus `security-events: write` for the
-SARIF upload in workspace mode. Triggers and `concurrency` are the caller's as
-well.
+The caller's grant is the ceiling for the called jobs. A package scan runs
+with `contents: read`; a workspace scan also needs `security-events: write`
+for the SARIF upload. Triggers and `concurrency` are the caller's as well.
 
 ## Inputs
 
