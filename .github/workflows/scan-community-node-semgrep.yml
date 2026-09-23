@@ -1,0 +1,123 @@
+name: 'Scan Community Node (Semgrep)'
+
+# One job of the scan-community-node reusable workflow. Called by
+# scan-community-node.yml; runnable on its own through workflow_dispatch.
+
+on:
+  workflow_call:
+    inputs: &inputs
+      package:
+        description: 'npm package name to scan (e.g. express or @scope/pkg). Leave empty to scan the calling repository.'
+        required: false
+        default: ''
+        type: string
+      version:
+        description: 'Version or dist-tag of the package to scan.'
+        required: false
+        default: 'latest'
+        type: string
+      upload-sarif:
+        description: 'Upload the SARIF report to GitHub code scanning when scanning the calling repository.'
+        required: false
+        default: true
+        type: boolean
+      semgrep-version:
+        description: 'Semgrep version, installed from PyPI with uvx.'
+        required: false
+        default: '1.177.0'
+        type: string
+  workflow_dispatch:
+    inputs: *inputs
+
+# No `permissions` block on purpose. A called workflow cannot declare more
+# than the caller granted: GitHub rejects the whole run at startup with
+# "The nested job ... is requesting 'security-events: write', but is only
+# allowed 'security-events: none'", even for jobs that would be skipped. So
+# the caller's grant applies unchanged; see scan-community-node/README.md.
+
+jobs:
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - if: inputs.package == ''
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: $/scan-community-node/actions/setup
+        with:
+          scanner: semgrep
+          package: ${{ inputs.package }}
+          version: ${{ inputs.version }}
+          node: 'true'
+
+      - id: fetch
+        if: inputs.package != ''
+        uses: $/scan-community-node/actions/fetch-package
+        with:
+          package: ${{ inputs.package }}
+          version: ${{ inputs.version }}
+
+      - name: Run Semgrep
+        env:
+          PACKAGE: ${{ inputs.package }}
+          SEMGREP_VERSION: ${{ inputs.semgrep-version }}
+          TARGET: ${{ steps.fetch.outputs.path || github.workspace }}
+        run: |
+          set -euo pipefail
+
+          # The version is spliced into a PyPI package spec. Restrict it to a
+          # version string so it cannot point uvx at another package.
+          if [[ ! "$SEMGREP_VERSION" =~ ^[0-9][A-Za-z0-9.+-]*$ ]]; then
+            echo "::error::semgrep-version must be a version string, got '$SEMGREP_VERSION'"
+            exit 1
+          fi
+
+          SARIF="$GITHUB_WORKSPACE/security.semgrep.sarif"
+          FLAGS=()
+          if [ -n "$PACKAGE" ]; then
+            # A package must not be able to tune or suppress its own scan:
+            # replace its ignore file (this also disables Semgrep's default
+            # ignores, so the shipped dist/ code is scanned) and disregard
+            # inline `nosemgrep` comments. Remove first so a symlink shipped
+            # in the tarball cannot redirect the write.
+            rm -f "$TARGET/.semgrepignore"
+            : > "$TARGET/.semgrepignore"
+            FLAGS+=(--disable-nosem)
+          fi
+          cd "$TARGET"
+
+          # Semgrep exits 0 on findings unless --error is passed, which this
+          # workflow does not do. Exit code 1 is still treated as findings so
+          # the report-only contract holds if that default ever changes;
+          # anything else is a scanner failure.
+          set +e
+          uvx "semgrep@${SEMGREP_VERSION}" scan --config auto "${FLAGS[@]}" --sarif-output "$SARIF" .
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ] && [ "$code" -ne 1 ]; then
+            echo "::error::Semgrep failed with exit code $code"
+            exit "$code"
+          fi
+
+      - name: Write Semgrep summary
+        id: summary
+        if: always()
+        uses: $/scan-community-node/actions/security-summary
+        with:
+          scanner: Semgrep
+          package: ${{ inputs.package }}
+          version: ${{ inputs.version }}
+          sarif: security.semgrep.sarif
+
+      - name: Upload Semgrep SARIF file to GitHub
+        if: always()
+        uses: $/scan-community-node/actions/upload-security-sarif
+        with:
+          category: scan-community-node/semgrep
+          sarif: ${{ steps.summary.outputs.sarif }}
+          package: ${{ inputs.package }}
+          upload: ${{ inputs.upload-sarif }}

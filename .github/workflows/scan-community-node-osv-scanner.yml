@@ -1,0 +1,144 @@
+name: 'Scan Community Node (OSV-Scanner)'
+
+# One job of the scan-community-node reusable workflow. Called by
+# scan-community-node.yml; runnable on its own through workflow_dispatch.
+
+on:
+  workflow_call:
+    inputs: &inputs
+      package:
+        description: 'npm package name to scan (e.g. express or @scope/pkg). Leave empty to scan the calling repository.'
+        required: false
+        default: ''
+        type: string
+      version:
+        description: 'Version or dist-tag of the package to scan.'
+        required: false
+        default: 'latest'
+        type: string
+      upload-sarif:
+        description: 'Upload the SARIF report to GitHub code scanning when scanning the calling repository.'
+        required: false
+        default: true
+        type: boolean
+  workflow_dispatch:
+    inputs: *inputs
+
+# No `permissions` block on purpose. A called workflow cannot declare more
+# than the caller granted: GitHub rejects the whole run at startup with
+# "The nested job ... is requesting 'security-events: write', but is only
+# allowed 'security-events: none'", even for jobs that would be skipped. So
+# the caller's grant applies unchanged; see scan-community-node/README.md.
+
+env:
+  OSV_SCANNER_VERSION: 2.5.1
+  # SHA-256 of osv-scanner_linux_amd64; update when bumping the version.
+  OSV_SCANNER_SHA256: f9f25499a2c8cc367b3af45df2ea7eeca7fbccceab9c35079968f4b3652194be
+
+jobs:
+  osv-scanner:
+    name: OSV-Scanner
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - if: inputs.package == ''
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: $/scan-community-node/actions/setup
+        with:
+          scanner: osv-scanner
+          package: ${{ inputs.package }}
+          version: ${{ inputs.version }}
+          node: 'true'
+
+      - id: fetch
+        if: inputs.package != ''
+        uses: $/scan-community-node/actions/fetch-package
+        with:
+          package: ${{ inputs.package }}
+          version: ${{ inputs.version }}
+
+      - name: Resolve package dependencies
+        id: resolve
+        env:
+          PACKAGE: ${{ inputs.package }}
+          TARGET: ${{ steps.fetch.outputs.path || github.workspace }}
+        run: |
+          set -euo pipefail
+
+          # A published package ships no lockfile, and a repository may not
+          # have one at its root either. Without a lockfile OSV-Scanner would
+          # report a clean result while checking nothing, so resolve one from
+          # the root package.json. A repository gets it in a scratch copy that
+          # is scanned in addition to the checkout, so nested lockfiles are
+          # still covered and the checkout stays untouched.
+          echo "target=$TARGET" >> "$GITHUB_OUTPUT"
+          if [ -e "$TARGET/package-lock.json" ] || [ -e "$TARGET/npm-shrinkwrap.json" ] || [ -e "$TARGET/pnpm-lock.yaml" ] || [ -e "$TARGET/yarn.lock" ] || [ -e "$TARGET/bun.lock" ] || [ -e "$TARGET/bun.lockb" ]; then
+            exit 0
+          fi
+          if [ ! -f "$TARGET/package.json" ]; then
+            if [ -n "$PACKAGE" ]; then
+              echo "::error::The package ships neither a package.json nor a lockfile."
+              exit 1
+            fi
+            # A repository without a root manifest may still hold nested
+            # packages; the recursive scan finds their lockfiles.
+            exit 0
+          fi
+          if [ -n "$PACKAGE" ]; then
+            (cd "$TARGET" && npm install --package-lock-only --ignore-scripts)
+          else
+            SCRATCH="$RUNNER_TEMP/scan-community-node/lockfile"
+            rm -rf "$SCRATCH"
+            mkdir -p "$SCRATCH"
+            cp "$TARGET/package.json" "$SCRATCH/"
+            (cd "$SCRATCH" && npm install --package-lock-only --ignore-scripts)
+            echo "extra=$SCRATCH" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run OSV-Scanner
+        env:
+          TARGET: ${{ steps.resolve.outputs.target }}
+          EXTRA: ${{ steps.resolve.outputs.extra }}
+        run: |
+          set -euo pipefail
+
+          BIN="$RUNNER_TEMP/osv-scanner"
+          curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${OSV_SCANNER_VERSION}/osv-scanner_linux_amd64" -o "$BIN"
+          echo "${OSV_SCANNER_SHA256}  $BIN" | sha256sum -c -
+          chmod +x "$BIN"
+
+          # The binary is run directly rather than through
+          # google/osv-scanner-action so the exit code is visible: 1 means
+          # vulnerabilities were found, which is reported, not enforced.
+          # Anything else is a scanner failure.
+          set +e
+          "$BIN" --format=sarif --output-file=security.osv-scanner.sarif --recursive --allow-no-lockfiles "$TARGET" ${EXTRA:+"$EXTRA"}
+          code=$?
+          set -e
+          if [ "$code" -ne 0 ] && [ "$code" -ne 1 ]; then
+            echo "::error::OSV-Scanner failed with exit code $code"
+            exit "$code"
+          fi
+
+      - name: Write OSV-Scanner summary
+        id: summary
+        if: always()
+        uses: $/scan-community-node/actions/security-summary
+        with:
+          scanner: OSV-Scanner
+          package: ${{ inputs.package }}
+          version: ${{ inputs.version }}
+          sarif: security.osv-scanner.sarif
+
+      - name: Upload OSV-Scanner SARIF file to GitHub
+        if: always()
+        uses: $/scan-community-node/actions/upload-security-sarif
+        with:
+          category: scan-community-node/osv-scanner
+          sarif: ${{ steps.summary.outputs.sarif }}
+          package: ${{ inputs.package }}
+          upload: ${{ inputs.upload-sarif }}

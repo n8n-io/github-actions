@@ -1,0 +1,115 @@
+name: 'Scan Community Node (GuardDog)'
+
+# One job of the scan-community-node reusable workflow. Called by
+# scan-community-node.yml; runnable on its own through workflow_dispatch.
+
+on:
+  workflow_call:
+    inputs: &inputs
+      package:
+        description: 'npm package name to scan (e.g. express or @scope/pkg). Leave empty to scan the calling repository.'
+        required: false
+        default: ''
+        type: string
+      version:
+        description: 'Version or dist-tag of the package to scan.'
+        required: false
+        default: 'latest'
+        type: string
+      sandbox:
+        description: 'Run GuardDog package scans inside its kernel-level sandbox. Set to false where the sandbox is unavailable.'
+        required: false
+        default: true
+        type: boolean
+      upload-sarif:
+        description: 'Upload the SARIF report to GitHub code scanning when scanning the calling repository.'
+        required: false
+        default: true
+        type: boolean
+      guarddog-version:
+        description: 'GuardDog version, installed from PyPI with uvx.'
+        required: false
+        default: '3.2.0'
+        type: string
+  workflow_dispatch:
+    inputs: *inputs
+
+# No `permissions` block on purpose. A called workflow cannot declare more
+# than the caller granted: GitHub rejects the whole run at startup with
+# "The nested job ... is requesting 'security-events: write', but is only
+# allowed 'security-events: none'", even for jobs that would be skipped. So
+# the caller's grant applies unchanged; see scan-community-node/README.md.
+
+jobs:
+  guarddog:
+    name: GuardDog
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - if: inputs.package == ''
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: $/scan-community-node/actions/setup
+        with:
+          scanner: guarddog
+          package: ${{ inputs.package }}
+          version: ${{ inputs.version }}
+
+      - name: Run GuardDog
+        env:
+          PACKAGE: ${{ inputs.package }}
+          VERSION: ${{ inputs.version }}
+          SANDBOX: ${{ inputs.sandbox }}
+          GUARDDOG_VERSION: ${{ inputs.guarddog-version }}
+        run: |
+          # pipefail so a GuardDog failure is not masked by tee's exit code.
+          set -euo pipefail
+
+          # The version is spliced into a PyPI package spec. Restrict it to a
+          # version string so it cannot point uvx at another package.
+          if [[ ! "$GUARDDOG_VERSION" =~ ^[0-9][A-Za-z0-9.+-]*$ ]]; then
+            echo "::error::guarddog-version must be a version string, got '$GUARDDOG_VERSION'"
+            exit 1
+          fi
+
+          # GuardDog exits 0 on findings unless --exit-non-zero-on-finding is
+          # passed, which this workflow does not do. A non-zero exit therefore
+          # means the scanner itself failed, and the step fails with it.
+          if [ -n "$PACKAGE" ]; then
+            # `guarddog npm scan` cannot emit SARIF, so keep its native report.
+            # Only `scan` runs the package inside a sandbox; `verify` has no
+            # such option.
+            FLAGS=()
+            if [ "$SANDBOX" = "false" ]; then
+              FLAGS+=(--no-sandbox)
+            fi
+            if [ "$VERSION" != "latest" ]; then
+              FLAGS+=(--version "$VERSION")
+            fi
+            uvx "guarddog@${GUARDDOG_VERSION}" npm scan "${FLAGS[@]}" "$PACKAGE" | tee security.guarddog.txt
+          else
+            uvx "guarddog@${GUARDDOG_VERSION}" npm verify --output-format sarif package.json > security.guarddog.sarif
+          fi
+
+      - name: Write GuardDog summary
+        id: summary
+        if: always()
+        uses: $/scan-community-node/actions/security-summary
+        with:
+          scanner: GuardDog
+          package: ${{ inputs.package }}
+          version: ${{ inputs.version }}
+          sarif: security.guarddog.sarif
+          text: security.guarddog.txt
+
+      - name: Upload GuardDog SARIF file to GitHub
+        if: always()
+        uses: $/scan-community-node/actions/upload-security-sarif
+        with:
+          category: scan-community-node/guarddog
+          sarif: ${{ steps.summary.outputs.sarif }}
+          package: ${{ inputs.package }}
+          upload: ${{ inputs.upload-sarif }}

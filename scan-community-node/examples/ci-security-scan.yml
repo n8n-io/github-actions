@@ -1,0 +1,56 @@
+name: 'CI: Security Scan'
+run-name: "${{ inputs.package && format('CI: Security Scan ({0}@{1})', inputs.package, inputs.version) || '' }}"
+
+# Copy this file to .github/workflows/ci-security-scan.yml in the consuming repo
+# and replace the pinned SHA.
+#
+# On push, pull_request and schedule the repository's own package.json is
+# scanned and the SARIF reports land under Security → Code scanning. Dispatch
+# the workflow with a package name to scan a published community node instead;
+# those findings only appear in the job summaries.
+#
+# The called workflows declare no permissions, so the grant below is what
+# their jobs run with. `security-events: write` is only needed for the SARIF
+# upload in workspace mode. Pull requests from forks get a read-only token;
+# the called workflow skips the upload and Scorecard for those and still
+# reports to the step summary.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'npm package name to scan (e.g. express or @scope/pkg). Leave empty to scan this repository.'
+        required: false
+        type: string
+      version:
+        description: 'Version or dist-tag of the package to scan.'
+        required: false
+        default: 'latest'
+        type: string
+      scanners:
+        description: 'Scanner to run'
+        required: false
+        default: all
+        type: choice
+        options: [all, guarddog, semgrep, scorecard, osv-scanner, gitleaks]
+
+permissions:
+  contents: read
+  security-events: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan:
+    uses: n8n-io/github-actions/.github/workflows/scan-community-node.yml@REPLACE_WITH_SHA # v1.0.0
+    with:
+      package: ${{ inputs.package }}
+      version: ${{ inputs.version || 'latest' }}
+      scanners: ${{ (inputs.scanners == '' || inputs.scanners == 'all') && 'guarddog,semgrep,scorecard,osv-scanner,gitleaks' || inputs.scanners }}

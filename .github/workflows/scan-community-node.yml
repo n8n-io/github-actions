@@ -1,0 +1,188 @@
+name: 'Scan Community Node'
+
+# Reusable workflow that scans an npm package, or the calling repository's
+# package.json, for malware, insecure code, misconfiguration, known
+# vulnerabilities and leaked secrets. Each scanner is its own reusable
+# workflow (scan-community-node-<scanner>.yml) and runs as a parallel job.
+#
+# With `package` set, the published npm package is downloaded and scanned;
+# the calling repository is not checked out. Without it, the calling
+# repository is checked out and scanned, and the SARIF reports are uploaded to
+# its code scanning.
+#
+# Every scanner reports; none of them fails its job on findings. A job fails
+# only when a scanner cannot run.
+#
+# The caller's grant applies unchanged to every job below: `contents: read`
+# for a package scan, plus `security-events: write` for the SARIF upload in
+# workspace mode. Nothing here declares `permissions`, because a called
+# workflow that asks for more than the caller granted fails the whole run at
+# startup, even for jobs that would be skipped. See
+# scan-community-node/examples/ci-security-scan.yml.
+
+on:
+  workflow_call:
+    inputs: &inputs
+      package:
+        description: 'npm package name to scan (e.g. express or @scope/pkg). Leave empty to scan the calling repository.'
+        required: false
+        default: ''
+        type: string
+      version:
+        description: 'Version or dist-tag of the package to scan. Ignored by Scorecard, which scores the source repository.'
+        required: false
+        default: 'latest'
+        type: string
+      scanners:
+        description: 'Comma-separated subset of guarddog, semgrep, scorecard, osv-scanner, gitleaks. Defaults to all of them.'
+        required: false
+        default: 'guarddog,semgrep,scorecard,osv-scanner,gitleaks'
+        type: string
+      sandbox:
+        description: 'Run GuardDog package scans inside its kernel-level sandbox. Set to false where the sandbox is unavailable.'
+        required: false
+        default: true
+        type: boolean
+      upload-sarif:
+        description: 'Upload SARIF reports to GitHub code scanning. Only applies when scanning the calling repository; findings of a third-party package are never uploaded.'
+        required: false
+        default: true
+        type: boolean
+      guarddog-version:
+        description: 'GuardDog version, installed from PyPI with uvx.'
+        required: false
+        default: '3.2.0'
+        type: string
+      semgrep-version:
+        description: 'Semgrep version, installed from PyPI with uvx.'
+        required: false
+        default: '1.177.0'
+        type: string
+  workflow_dispatch:
+    inputs: *inputs
+
+jobs:
+  prepare:
+    name: Prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      # Normalized to ",a,b,c," so the scanner jobs can test for ",name,".
+      scanners: ${{ steps.prepare.outputs.scanners }}
+      fork: ${{ steps.prepare.outputs.fork }}
+    steps:
+      - name: Validate scanners and write target summary
+        id: prepare
+        env:
+          PACKAGE: ${{ inputs.package }}
+          VERSION: ${{ inputs.version }}
+          SCANNERS: ${{ inputs.scanners }}
+          # Pull requests from forks get a read-only GITHUB_TOKEN, so the SARIF
+          # upload would fail with 403, and Scorecard does not support forks.
+          FORK: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+        run: |
+          set -euo pipefail
+
+          normalized=","
+          IFS=, read -ra requested <<< "$SCANNERS"
+          for s in "${requested[@]}"; do
+            s="${s// /}"
+            case "$s" in
+              guarddog|semgrep|scorecard|osv-scanner|gitleaks) normalized+="$s," ;;
+              '') ;;
+              *)
+                echo "::error::scanners must be a comma-separated subset of guarddog, semgrep, scorecard, osv-scanner, gitleaks; got '$s'"
+                exit 1 ;;
+            esac
+          done
+          if [ "$normalized" = "," ]; then
+            echo "::error::No scanner selected."
+            exit 1
+          fi
+          if [ "$FORK" = true ] && [ -z "$PACKAGE" ] && [[ "$normalized" == *,scorecard,* ]]; then
+            echo "::notice::Skipping Scorecard: it does not support pull requests from forks."
+            normalized="${normalized/,scorecard,/,}"
+            if [ "$normalized" = "," ]; then
+              # Failing here would block every fork PR of a caller that only
+              # runs Scorecard, so say loudly that nothing ran instead.
+              echo "::warning::No scanner left to run: Scorecard was the only one selected and this is a pull request from a fork."
+              {
+                echo "## Security scan skipped"
+                echo ""
+                echo "Scorecard was the only scanner selected and it does not support pull requests from forks."
+              } >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi
+
+          {
+            echo "scanners=$normalized"
+            echo "fork=$FORK"
+          } >> "$GITHUB_OUTPUT"
+          if [ "$normalized" = "," ]; then
+            exit 0
+          fi
+
+          if [ -n "$PACKAGE" ]; then
+            TARGET="$PACKAGE"
+            SCANNED_VERSION="$VERSION"
+          else
+            TARGET="$GITHUB_REPOSITORY"
+            SCANNED_VERSION="$GITHUB_SHA"
+          fi
+          # Strip characters that could break out of the markdown table cell.
+          TARGET=$(printf '%s' "$TARGET" | tr -d '\n\r`' | sed 's/|/\\|/g')
+          SCANNED_VERSION=$(printf '%s' "$SCANNED_VERSION" | tr -d '\n\r`' | sed 's/|/\\|/g')
+          {
+            echo "## Security scan target"
+            echo ""
+            echo "| Target | Version | Scanners |"
+            echo "| --- | --- | --- |"
+            echo "| $TARGET | $SCANNED_VERSION | ${normalized:1:-1} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  scan-for-malware:
+    needs: prepare
+    if: contains(needs.prepare.outputs.scanners, ',guarddog,')
+    uses: $/.github/workflows/scan-community-node-guarddog.yml
+    with:
+      package: ${{ inputs.package }}
+      version: ${{ inputs.version }}
+      sandbox: ${{ inputs.sandbox }}
+      upload-sarif: ${{ inputs.upload-sarif && needs.prepare.outputs.fork != 'true' }}
+      guarddog-version: ${{ inputs.guarddog-version }}
+
+  scan-for-insecure-code:
+    needs: prepare
+    if: contains(needs.prepare.outputs.scanners, ',semgrep,')
+    uses: $/.github/workflows/scan-community-node-semgrep.yml
+    with:
+      package: ${{ inputs.package }}
+      version: ${{ inputs.version }}
+      upload-sarif: ${{ inputs.upload-sarif && needs.prepare.outputs.fork != 'true' }}
+      semgrep-version: ${{ inputs.semgrep-version }}
+
+  scan-for-misconfiguration:
+    needs: prepare
+    if: contains(needs.prepare.outputs.scanners, ',scorecard,')
+    uses: $/.github/workflows/scan-community-node-scorecard.yml
+    with:
+      package: ${{ inputs.package }}
+      upload-sarif: ${{ inputs.upload-sarif && needs.prepare.outputs.fork != 'true' }}
+
+  scan-for-vulnerabilities:
+    needs: prepare
+    if: contains(needs.prepare.outputs.scanners, ',osv-scanner,')
+    uses: $/.github/workflows/scan-community-node-osv-scanner.yml
+    with:
+      package: ${{ inputs.package }}
+      version: ${{ inputs.version }}
+      upload-sarif: ${{ inputs.upload-sarif && needs.prepare.outputs.fork != 'true' }}
+
+  scan-for-secrets:
+    needs: prepare
+    if: contains(needs.prepare.outputs.scanners, ',gitleaks,')
+    uses: $/.github/workflows/scan-community-node-gitleaks.yml
+    with:
+      package: ${{ inputs.package }}
+      version: ${{ inputs.version }}
+      upload-sarif: ${{ inputs.upload-sarif && needs.prepare.outputs.fork != 'true' }}

@@ -1,0 +1,99 @@
+name: Security summary
+description: Render a SARIF or plain-text scan report into the job step summary.
+
+inputs:
+  scanner:
+    description: Display name of the scanner, used as the heading.
+    required: true
+  package:
+    description: Scanned npm package name. Empty means the workspace was scanned.
+    required: false
+    default: ''
+  version:
+    description: Version or dist-tag of the package.
+    required: false
+    default: 'latest'
+  sarif:
+    description: Path to a SARIF file to summarize (preferred).
+    required: false
+    default: ''
+  text:
+    description: Path to a plain-text report used when no SARIF is available.
+    required: false
+    default: ''
+
+outputs:
+  sarif:
+    description: The SARIF path when the file exists and is not empty, otherwise empty.
+    value: ${{ steps.report.outputs.sarif }}
+
+runs:
+  using: composite
+  steps:
+    - id: report
+      shell: bash
+      env:
+        SCANNER: ${{ inputs.scanner }}
+        PACKAGE: ${{ inputs.package }}
+        VERSION: ${{ inputs.version }}
+        SARIF: ${{ inputs.sarif }}
+        TEXT: ${{ inputs.text }}
+      run: |
+        set -euo pipefail
+
+        if [ -n "$PACKAGE" ]; then
+          TARGET="$PACKAGE@$VERSION"
+        else
+          TARGET="$GITHUB_REPOSITORY"
+        fi
+        # Strip characters that could break out of the heading.
+        TARGET=$(printf '%s' "$TARGET" | tr -d '\n\r`')
+
+        # Symlinks are rejected so a checked-in link cannot point the summary
+        # or the upload at an arbitrary file.
+        if [ -n "$SARIF" ] && [ ! -L "$SARIF" ] && [ -s "$SARIF" ]; then
+          SRC=sarif
+          echo "sarif=$SARIF" >> "$GITHUB_OUTPUT"
+        elif [ -n "$TEXT" ] && [ ! -L "$TEXT" ] && [ -s "$TEXT" ]; then
+          SRC=text
+        else
+          {
+            echo "## $SCANNER: $TARGET"
+            echo ""
+            echo "The scanner produced no report. See the step log."
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 0
+        fi
+
+        REPORT="$(mktemp)"
+        if [ "$SRC" = sarif ]; then
+          uvx --from sarif-tools@3.0.5 sarif summary "$SARIF" > "$REPORT"
+          # summary abbreviates each rule, so append the full per-finding CSV.
+          CSV="$(mktemp -u).csv"
+          uvx --from sarif-tools@3.0.5 sarif csv -o "$CSV" "$SARIF" >/dev/null
+          echo >> "$REPORT"
+          # CSV always has a header row; more lines mean actual findings.
+          if [ "$(wc -l < "$CSV")" -gt 1 ]; then
+            cat "$CSV" >> "$REPORT"
+          else
+            echo 'No findings.' >> "$REPORT"
+          fi
+          rm -f "$CSV"
+        else
+          cat "$TEXT" > "$REPORT"
+        fi
+
+        # Escape leading backticks so untrusted scan output cannot close the
+        # code fence and inject markdown into the step summary. A closing fence
+        # may be indented by up to three spaces, so those count as leading too.
+        sed -i -E 's/^( {0,3})`/\1\\`/' "$REPORT"
+        {
+          echo "## $SCANNER: $TARGET"
+          echo ""
+          echo '```'
+          cat "$REPORT"
+          # Newline so output without a trailing one does not glue to the fence.
+          echo
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+        rm -f "$REPORT"

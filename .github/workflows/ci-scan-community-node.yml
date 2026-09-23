@@ -1,0 +1,50 @@
+name: 'CI: Scan Community Node'
+
+# Exercises the scan-community-node reusable workflow on pull requests that
+# touch it: once against a published package and once against this repository.
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/scan-community-node*.yml'
+      - '.github/workflows/ci-scan-community-node.yml'
+      - 'scan-community-node/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Called with a read-only token, as a consumer that only scans packages
+  # would do.
+  package:
+    uses: $/.github/workflows/scan-community-node.yml
+    with:
+      package: n8n-nodes-evolution-api
+      version: 1.0.4
+
+  workspace:
+    permissions:
+      contents: read
+      security-events: write
+    uses: $/.github/workflows/scan-community-node.yml
+    with:
+      # Semgrep and Scorecard do not know `$/` and would flag every
+      # self-reference in these workflows as an unpinned action, and Scorecard
+      # also wants top-level permissions on the called workflows, which they
+      # cannot declare. Uploading their SARIF would fail this repo's code
+      # scanning check, so this job covers the upload path with the other three
+      # scanners. The package job still runs Semgrep and Scorecard.
+      scanners: guarddog,osv-scanner,gitleaks
+
+  # Scorecard in workspace mode, without the upload, so the scorecard-action
+  # path stays exercised.
+  workspace-scorecard:
+    uses: $/.github/workflows/scan-community-node.yml
+    with:
+      scanners: scorecard
+      upload-sarif: false
