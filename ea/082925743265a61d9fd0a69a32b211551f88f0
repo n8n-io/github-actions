@@ -1,0 +1,25 @@
+cla-check/README.md
+  s_c24b7d225ca80d::t_27b51ca1694db1 39
+cla-check/action.yml
+  s_c24b7d225ca80d::t_27b51ca1694db1 21-23,75
+cla-check/scripts/resolve-context.mjs
+  s_c24b7d225ca80d::t_27b51ca1694db1 57,59
+cla-check/examples/ci-cla-check.yml
+  s_c24b7d225ca80d::t_27b51ca1694db1 74
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "ea082925743265a61d9fd0a69a32b211551f88f0",
+  "prompts": {},
+  "sessions": {
+    "s_c24b7d225ca80d": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_f32ea4a04ffekQkPU9QA7Ogiy1",
+        "model": "openai/gpt-5.6-sol"
+      },
+      "human_author": "Matsuuu <matias.huhta@n8n.io>"
+    }
+  }
+}
