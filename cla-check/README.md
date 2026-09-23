@@ -36,6 +36,7 @@ particular is load-bearing (see the comment in the file).
 |-------|----------|---------|-------------|
 | `app-id` | yes | — | App ID of the GitHub App used to authenticate API calls |
 | `private-key` | yes | — | Private key of the GitHub App |
+| `pr-number` | no | — | Pull request number to verify when triggered by `workflow_dispatch` |
 | `cla-api` | no | n8n prod CLA service | Endpoint queried as `<cla-api>?checkContributor=<login>` |
 | `cla-sign-url` | no | n8n prod CLA form | URL contributors visit to sign |
 | `status-context` | no | `CLA Check` | Commit status name that rulesets gate on |

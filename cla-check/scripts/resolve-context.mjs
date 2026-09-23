@@ -54,9 +54,9 @@ export default async function resolveClaContext({ github, context, core }) {
 		headSha = context.payload.merge_group.head_sha;
 		baseSha = context.payload.merge_group.base_sha;
 	} else if (event === 'workflow_dispatch') {
-		const input = context.payload.inputs?.pr_number;
+		const input = process.env.PR_NUMBER;
 		if (!input) {
-			core.setFailed('workflow_dispatch requires the pr_number input');
+			core.setFailed('workflow_dispatch requires the pr-number input');
 			return;
 		}
 		prNumber = String(input);

@@ -18,6 +18,9 @@ inputs:
   private-key:
     description: 'Private key of the GitHub App'
     required: true
+  pr-number:
+    description: 'Pull request number to verify when triggered by workflow_dispatch'
+    required: false
   cla-api:
     description: 'CLA service endpoint, queried as `<cla-api>?checkContributor=<login>`'
     required: false
@@ -69,6 +72,7 @@ runs:
       uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
       env:
         ACTION_PATH: ${{ github.action_path }}
+        PR_NUMBER: ${{ inputs.pr-number }}
       with:
         github-token: ${{ steps.app-token.outputs.token }}
         script: |
