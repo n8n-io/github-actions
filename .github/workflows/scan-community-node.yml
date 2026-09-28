@@ -1,0 +1,87 @@
+name: 'Scan Community Node'
+
+on:
+  workflow_call:
+    inputs:
+      package:
+        description: 'npm package name to scan (e.g. express or @scope/pkg). Leave empty to verify the local package.json.'
+        required: false
+        type: string
+      version:
+        description: 'Optional package version to scan (e.g. 4.18.2).'
+        required: false
+        default: 'latest'
+        type: string
+      sandbox:
+        description: 'Whether GuardDog should run inside its kernel-level sandbox.'
+        required: false
+        default: true
+        type: boolean
+      upload-sarif:
+        description: 'Whether to upload SARIF reports to GitHub code scanning.'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  summary:
+    name: Test summary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write test target summary
+        env:
+          PACKAGE: ${{ inputs.package }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [ -n "$PACKAGE" ]; then
+            TARGET="$PACKAGE"
+            SCANNED_VERSION="${VERSION:-latest}"
+          else
+            TARGET="local package.json"
+            SCANNED_VERSION="n/a"
+          fi
+          # Strip characters that could break out of the markdown table cell.
+          TARGET=$(printf '%s' "$TARGET" | tr -d '\n\r`' | sed 's/|/\\|/g')
+          SCANNED_VERSION=$(printf '%s' "$SCANNED_VERSION" | tr -d '\n\r`' | sed 's/|/\\|/g')
+          {
+            echo "## Security scan target"
+            echo ""
+            echo "| Package | Version |"
+            echo "| --- | --- |"
+            echo "| $TARGET | $SCANNED_VERSION |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  scan-for-malware:
+    uses: $/.github/workflows/scan-community-node-guarddog.yml
+    with:
+      package: ${{ inputs.package }}
+      version: ${{ inputs.version }}
+      sandbox: ${{ inputs.sandbox }}
+      upload-sarif: ${{ inputs.upload-sarif }}
+
+  scan-for-insecure-code:
+    uses: $/.github/workflows/scan-community-node-semgrep.yml
+    with:
+      package: ${{ inputs.package }}
+      version: ${{ inputs.version }}
+      upload-sarif: ${{ inputs.upload-sarif }}
+
+  scan-for-misconfiguration:
+    uses: $/.github/workflows/scan-community-node-scorecard.yml
+    with:
+      package: ${{ inputs.package }}
+      upload-sarif: ${{ inputs.upload-sarif }}
+
+  scan-for-vulnerabilities:
+    uses: $/.github/workflows/scan-community-node-cve-lite.yml
+    with:
+      package: ${{ inputs.package }}
+      version: ${{ inputs.version }}
+      upload-sarif: ${{ inputs.upload-sarif }}
+
+  scan-for-secrets:
+    uses: $/.github/workflows/scan-community-node-gitleaks.yml
+    with:
+      package: ${{ inputs.package }}
+      version: ${{ inputs.version }}
+      upload-sarif: ${{ inputs.upload-sarif }}

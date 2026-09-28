@@ -1,0 +1,32 @@
+name: 'CI: Scan Community Node'
+
+# Exercises the scan-community-node reusable workflow on pull requests that
+# touch it: once against a published package and once against this repository.
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/scan-community-node*.yml'
+      - '.github/workflows/ci-scan-community-node.yml'
+      - 'scan-community-node/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # A consumer that only scans packages needs nothing beyond contents: read.
+  package:
+    uses: $/.github/workflows/scan-community-node.yml
+    with:
+      package: n8n-nodes-evolution-api
+      version: 1.0.4
+
+  # Scans this repository. The upload stays off: Semgrep and Scorecard do not
+  # know `$/` and would report every self-reference here as an unpinned action.
+  workspace:
+    uses: $/.github/workflows/scan-community-node.yml

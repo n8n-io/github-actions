@@ -1,0 +1,72 @@
+name: 'Scan Community Node (Gitleaks)'
+
+on:
+  workflow_call:
+    inputs:
+      package:
+        description: 'npm package name to scan (e.g. express or @scope/pkg). Leave empty to verify the local package.json.'
+        required: false
+        type: string
+      version:
+        description: 'Optional package version to scan (e.g. 4.18.2).'
+        required: false
+        default: 'latest'
+        type: string
+      upload-sarif:
+        description: 'Whether to upload SARIF reports to GitHub code scanning.'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  PACKAGE_SPEC: ${{ inputs.package }}@${{ inputs.version }}
+  GITLEAKS_VERSION: 8.30.1
+  # SHA-256 of gitleaks_<version>_linux_x64.tar.gz; update when bumping the version.
+  GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+
+jobs:
+  gitleaks:
+    name: Gitleaks
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: $/scan-community-node/actions/setup
+        with:
+          node: 'true'
+
+      - name: Install Gitleaks
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o gitleaks.tar.gz
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+          rm -f gitleaks gitleaks.tar.gz
+
+      - name: Run Gitleaks
+        continue-on-error: true
+        env:
+          PACKAGE: ${{ inputs.package }}
+        run: |
+          if [ -n "$PACKAGE" ]; then
+            DIR="$RUNNER_TEMP/gitleaks-target"
+            rm -rf "$DIR" && mkdir -p "$DIR"
+            npm pack "$PACKAGE_SPEC"
+            tar -xzf ./*.tgz -C "$DIR" --strip-components=1
+            TARGET="$DIR"
+          else
+            TARGET="."
+          fi
+          gitleaks dir "$TARGET" --report-format sarif --report-path security-report/gitleaks.sarif
+
+      - name: Write Gitleaks summary
+        if: always()
+        uses: $/scan-community-node/actions/security-summary
+
+      - name: Upload Gitleaks SARIF file to GitHub
+        uses: $/scan-community-node/actions/upload-security-sarif
+        with:
+          category: gitleaks
+          package: ${{ inputs.package }}
+          upload: ${{ inputs.upload-sarif }}

@@ -1,0 +1,68 @@
+name: 'Scan Community Node (GuardDog)'
+
+on:
+  workflow_call:
+    inputs:
+      package:
+        description: 'npm package name to scan (e.g. express or @scope/pkg). Leave empty to verify the local package.json.'
+        required: false
+        type: string
+      version:
+        description: 'Optional package version to scan (e.g. 4.18.2).'
+        required: false
+        default: 'latest'
+        type: string
+      sandbox:
+        description: 'Whether GuardDog should run inside its kernel-level sandbox.'
+        required: false
+        default: true
+        type: boolean
+      upload-sarif:
+        description: 'Whether to upload SARIF reports to GitHub code scanning.'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  guarddog:
+    name: GuardDog
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: $/scan-community-node/actions/setup
+
+      - name: Run GuardDog
+        env:
+          PACKAGE: ${{ inputs.package }}
+          VERSION: ${{ inputs.version }}
+          SANDBOX: ${{ inputs.sandbox }}
+        run: |
+          # pipefail so a GuardDog failure isn't masked by tee's exit code.
+          set -o pipefail
+          SANDBOX_FLAG=""
+          if [ "$SANDBOX" = "false" ]; then
+            SANDBOX_FLAG="--no-sandbox"
+          fi
+          if [ -n "$PACKAGE" ]; then
+            # GuardDog scan can't emit SARIF, so keep its native report.
+            if [ -n "$VERSION" ] && [ "$VERSION" != "latest" ]; then
+              uvx guarddog npm scan $SANDBOX_FLAG "$PACKAGE" --version "$VERSION" | tee security-report/guarddog.txt
+            else
+              uvx guarddog npm scan $SANDBOX_FLAG "$PACKAGE" | tee security-report/guarddog.txt
+            fi
+          else
+            uvx guarddog npm verify $SANDBOX_FLAG --output-format sarif package.json > security-report/guarddog.sarif
+          fi
+
+      - name: Write GuardDog summary
+        if: always()
+        uses: $/scan-community-node/actions/security-summary
+
+      - name: Upload SARIF file to GitHub
+        uses: $/scan-community-node/actions/upload-security-sarif
+        with:
+          category: guarddog-builtin
+          package: ${{ inputs.package }}
+          upload: ${{ inputs.upload-sarif }}

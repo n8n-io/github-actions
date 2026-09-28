@@ -1,0 +1,60 @@
+name: 'Scan Community Node (OpenSSF Scorecard)'
+
+on:
+  workflow_call:
+    inputs:
+      package:
+        description: 'npm package name to scan (e.g. express or @scope/pkg). Leave empty to verify the local package.json.'
+        required: false
+        type: string
+      upload-sarif:
+        description: 'Whether to upload SARIF reports to GitHub code scanning.'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  scorecard:
+    name: OpenSSF Scorecard
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: $/scan-community-node/actions/setup
+
+      - name: Run OpenSSF Scorecard (repository)
+        if: ${{ inputs.package == '' }}
+        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        with:
+          results_file: security-report/scorecard.sarif
+          results_format: sarif
+          publish_results: false
+
+      - name: Run OpenSSF Scorecard (package)
+        if: ${{ inputs.package != '' }}
+        env:
+          PACKAGE: ${{ inputs.package }}
+          GITHUB_AUTH_TOKEN: ${{ github.token }}
+        run: |
+          # pipefail so a scorecard failure isn't masked by tee's exit code.
+          set -o pipefail
+          # The scorecard binary can't emit SARIF, so keep its native report.
+          # Scorecard scores the package's source repository (default branch),
+          # not a specific release, so there is no version to select.
+          docker run --rm -e GITHUB_AUTH_TOKEN \
+            ghcr.io/ossf/scorecard:v5.5.0@sha256:3f24714e9366917adb7a05635382c97dfecb14b21eaef3dfa2ea48c8e23e0795 \
+            --npm="$PACKAGE" --format=default | tee security-report/scorecard.txt
+
+      - name: Write Scorecard summary
+        if: always()
+        uses: $/scan-community-node/actions/security-summary
+
+      - name: Upload Scorecard SARIF file to GitHub
+        uses: $/scan-community-node/actions/upload-security-sarif
+        with:
+          category: scorecard
+          package: ${{ inputs.package }}
+          upload: ${{ inputs.upload-sarif }}

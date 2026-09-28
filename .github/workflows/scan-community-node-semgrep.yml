@@ -1,0 +1,63 @@
+name: 'Scan Community Node (Semgrep)'
+
+on:
+  workflow_call:
+    inputs:
+      package:
+        description: 'npm package name to scan (e.g. express or @scope/pkg). Leave empty to verify the local package.json.'
+        required: false
+        type: string
+      version:
+        description: 'Optional package version to scan (e.g. 4.18.2).'
+        required: false
+        default: 'latest'
+        type: string
+      upload-sarif:
+        description: 'Whether to upload SARIF reports to GitHub code scanning.'
+        required: false
+        default: false
+        type: boolean
+
+env:
+  PACKAGE_SPEC: ${{ inputs.package }}@${{ inputs.version }}
+
+jobs:
+  semgrep:
+    name: Semgrep
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: $/scan-community-node/actions/setup
+        with:
+          node: 'true'
+
+      - name: Run Semgrep
+        env:
+          PACKAGE: ${{ inputs.package }}
+        run: |
+          if [ -n "$PACKAGE" ]; then
+            # Extract outside the git tree so Semgrep doesn't skip untracked files,
+            # and disable its default ignores so shipped dist/ code is scanned.
+            DIR="$RUNNER_TEMP/semgrep-target"
+            rm -rf "$DIR" && mkdir -p "$DIR"
+            npm pack "$PACKAGE_SPEC"
+            tar -xzf ./*.tgz -C "$DIR" --strip-components=1
+            : > "$DIR/.semgrepignore"
+            SARIF="$PWD/security-report/semgrep.sarif"
+            (cd "$DIR" && uvx semgrep scan --config auto --sarif-output "$SARIF" .)
+          else
+            uvx semgrep scan --config auto --sarif-output security-report/semgrep.sarif .
+          fi
+
+      - name: Write Semgrep summary
+        if: always()
+        uses: $/scan-community-node/actions/security-summary
+
+      - name: Upload Semgrep SARIF file to GitHub
+        uses: $/scan-community-node/actions/upload-security-sarif
+        with:
+          category: semgrep
+          package: ${{ inputs.package }}
+          upload: ${{ inputs.upload-sarif }}
