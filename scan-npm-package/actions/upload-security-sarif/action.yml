@@ -20,6 +20,7 @@ runs:
     # Runs after a failed scan step too, so a report that was written still lands.
     # Skipped unless opted in, for external package scans (their findings aren't
     # ours), and for pull requests from forks, whose read-only token cannot upload.
+    # pull_request_target runs with a writable token, so it needs no guard.
     - if: >-
         ${{ always()
           && inputs.upload == 'true'

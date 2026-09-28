@@ -40,8 +40,8 @@ jobs:
             check "${path%/action.yml}"
           done
           # A reusable workflow is released under its file name and documents
-          # itself in <name>/README.md.
-          for path in $(grep -lE '^ +workflow_call:' .github/workflows/*.yml); do
+          # itself in <name>/README.md. No match means there is nothing to check.
+          for path in $(grep -lE '^ +workflow_call:' .github/workflows/*.yml || true); do
             name="$(basename "$path" .yml)"
             check "$name"
             [ -f "$name/README.md" ] || {

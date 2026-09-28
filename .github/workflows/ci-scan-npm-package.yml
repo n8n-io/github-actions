@@ -19,7 +19,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # A consumer that only scans packages needs nothing beyond contents: read.
+  # A consumer that only scans packages needs nothing beyond contents: read. The called
+  # workflow runs with the calling job's permissions and cannot elevate them.
   package:
     uses: $/.github/workflows/scan-npm-package.yml
     with:
