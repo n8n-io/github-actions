@@ -5,8 +5,8 @@ run-name: "Release: ${{ inputs.package }} (${{ inputs.bump }})${{ inputs.dry-run
 # version independently and a bump to one doesn't churn the others.
 #
 # Adding a new action or reusable workflow means adding it to the `package`
-# options below. CI fails if a directory with an action.yml, or a workflow
-# with a `workflow_call` trigger, is missing from that list.
+# options below. CI fails if a top-level directory with a README.md is missing
+# from that list.
 
 on:
   workflow_dispatch:

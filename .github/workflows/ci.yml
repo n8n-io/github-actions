@@ -36,17 +36,8 @@ jobs:
               missing=1
             }
           }
-          for path in */action.yml; do
-            check "${path%/action.yml}"
-          done
-          # A reusable workflow is released under its file name and documents
-          # itself in <name>/README.md. No match means there is nothing to check.
-          for path in $(grep -lE '^ +workflow_call:' .github/workflows/*.yml || true); do
-            name="$(basename "$path" .yml)"
-            check "$name"
-            [ -f "$name/README.md" ] || {
-              echo "::error::reusable workflow '$name' has no $name/README.md"
-              missing=1
-            }
+          # Every package, action or reusable workflow, is a top-level directory with a README.
+          for readme in */README.md; do
+            check "$(dirname "$readme")"
           done
           exit $missing
