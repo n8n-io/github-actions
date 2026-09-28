@@ -11,8 +11,13 @@ runs:
   using: composite
   steps:
     - shell: bash
-      # Recreated each run so a committed security-report/ never mixes with fresh reports.
-      run: rm -rf security-report && mkdir -p security-report
+      # A committed security-report/ would mix into this run's reports, and deleting it
+      # would hide it from the scanners, so it is set aside under another name instead.
+      run: |
+        if [ -e security-report ]; then
+          mv security-report security-report.committed
+        fi
+        mkdir -p security-report
 
     - if: ${{ inputs.node == 'true' }}
       uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
