@@ -1,5 +1,5 @@
 name: OpenSSF Scorecard
-description: Score the security posture of the workspace repository, or of a published npm package's source repository.
+description: Score the security posture of the workspace repository, or of a published npm package's source repository. A package scan needs Docker.
 
 inputs:
   package:

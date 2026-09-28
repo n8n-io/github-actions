@@ -47,9 +47,9 @@ on:
         required: false
         type: string
 
-# The called workflow declares no permissions and runs with this grant.
-# security-events: write is needed only for the SARIF upload, and a private
-# repository additionally needs actions: read for it.
+# The called workflow declares no permissions and runs with the calling job's,
+# which default to this grant. security-events: write is needed only for the
+# SARIF upload, and a private repository additionally needs actions: read for it.
 permissions:
   contents: read
   security-events: write
@@ -68,7 +68,7 @@ A single scanner can also run as a step in your own job, for example `uses: n8n-
 
 ## Two modes
 
-**Published package.** Set `package` (and optionally `version`) to download and scan an npm package. Its tarball is unpacked outside the workspace and a lockfile is resolved so the whole dependency tree is scanned. Findings show up in the step summary only: they belong to another project and are never uploaded to the caller's code scanning.
+**Published package.** Set `package` (and optionally `version`) to download and scan an npm package. Its tarball is unpacked outside the workspace, and the dependency scan resolves a lockfile so the whole tree is covered. Findings show up in the step summary only: they belong to another project and are never uploaded to the caller's code scanning.
 
 **Repository.** Leave `package` empty to scan the calling repository, which needs a `package.json`. With `upload-sarif` enabled the SARIF reports are uploaded to GitHub code scanning, so findings appear under **Security → Code scanning** next to CodeQL and other analyses. Uploading needs GitHub Code Security on the repository.
 

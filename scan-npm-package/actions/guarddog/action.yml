@@ -34,6 +34,8 @@ runs:
         if [ -n "$PACKAGE" ]; then
           # GuardDog scan can't emit SARIF, so keep its native report.
           if [ -n "$VERSION" ] && [ "$VERSION" != "latest" ]; then
+            # --version takes a concrete version, so resolve a dist-tag or range through npm first.
+            VERSION="$(npm view "$PACKAGE@$VERSION" version | tail -n 1 | awk '{print $NF}' | tr -d "'")"
             uvx "guarddog==$GUARDDOG_VERSION" npm scan $SANDBOX_FLAG "$PACKAGE" --version "$VERSION" | tee security-report/guarddog.txt
           else
             uvx "guarddog==$GUARDDOG_VERSION" npm scan $SANDBOX_FLAG "$PACKAGE" | tee security-report/guarddog.txt

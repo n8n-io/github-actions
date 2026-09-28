@@ -1,5 +1,5 @@
 name: Gitleaks
-description: Scan a published npm package, or the workspace, for hardcoded secrets.
+description: Scan a published npm package, or the workspace, for hardcoded secrets. Needs a Linux x64 runner with sudo.
 
 inputs:
   package:

@@ -36,7 +36,7 @@ runs:
         fi
         # Escape a backtick that opens a line, allowing up to three spaces of indentation, so
         # untrusted scan output can't close the code fence and inject markdown into the summary.
-        sed -i 's/^\( \{0,3\}\)`/\1\\`/' "$REPORT"
+        sed 's/^\( \{0,3\}\)`/\1\\`/' "$REPORT" > "$REPORT.escaped" && mv "$REPORT.escaped" "$REPORT"
         # $GITHUB_STEP_SUMMARY is the markdown shown on the run's summary page.
         {
           echo '```'
