@@ -2,17 +2,26 @@
 
 Shared GitHub Actions used across `n8n-io` repositories.
 
-| Action | Description |
+| Component | Description |
 |--------|-------------|
 | [`cla-check`](./cla-check) | Verify every contributor on a PR has signed the n8n CLA |
+| [`scan-npm-package`](./scan-npm-package) | Reusable workflow: scan a published npm package or the calling repository for malware, insecure code, misconfiguration, vulnerable dependencies and secrets |
 
-## Consuming an action
+## Consuming
 
 Reference the action by path, pinned to a commit SHA with the version in a
 trailing comment:
 
 ```yaml
 - uses: n8n-io/github-actions/cla-check@<sha> # v1.0.0
+```
+
+A reusable workflow is referenced by its file path and called from a job:
+
+```yaml
+jobs:
+  scan:
+    uses: n8n-io/github-actions/.github/workflows/scan-npm-package.yml@<sha> # v1.0.0
 ```
 
 Pin to a SHA rather than a tag. These actions run in workflows that hold

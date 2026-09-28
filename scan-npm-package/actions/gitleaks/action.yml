@@ -1,0 +1,42 @@
+name: Gitleaks
+description: Scan a published npm package, or the workspace, for hardcoded secrets.
+
+inputs:
+  package:
+    description: npm package name. Leave empty to scan the workspace.
+    required: false
+    default: ''
+  version:
+    description: Package version or dist-tag.
+    required: false
+    default: latest
+
+runs:
+  using: composite
+  steps:
+    - name: Install Gitleaks
+      shell: bash
+      env:
+        GITLEAKS_VERSION: 8.30.1
+        # SHA-256 of gitleaks_<version>_linux_x64.tar.gz; update when bumping the version.
+        GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+      run: |
+        curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o gitleaks.tar.gz
+        echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+        tar -xzf gitleaks.tar.gz gitleaks
+        sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+        rm -f gitleaks gitleaks.tar.gz
+
+    - if: ${{ inputs.package != '' }}
+      id: fetch
+      uses: $/scan-npm-package/actions/fetch-package
+      with:
+        package: ${{ inputs.package }}
+        version: ${{ inputs.version }}
+
+    - shell: bash
+      env:
+        TARGET: ${{ steps.fetch.outputs.path }}
+      run: |
+        # Leaks go to the report and exit 0, so only a scan that cannot run fails the step.
+        gitleaks dir "${TARGET:-.}" --report-format sarif --report-path security-report/gitleaks.sarif --exit-code 0
