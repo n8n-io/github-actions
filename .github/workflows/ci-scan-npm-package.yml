@@ -1,8 +1,5 @@
 name: 'CI: Scan npm Package'
 
-# Exercises the scan-npm-package reusable workflow on pull requests that
-# touch it: once against a published package and once against this repository.
-
 on:
   pull_request:
     paths:
