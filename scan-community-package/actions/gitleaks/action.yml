@@ -20,7 +20,11 @@ runs:
         # The runner image's formula snapshot is recent; skipping the tap update saves a minute.
         HOMEBREW_NO_AUTO_UPDATE: '1'
         HOMEBREW_NO_INSTALL_CLEANUP: '1'
-      run: brew install gitleaks
+      run: |
+        # The Ubuntu runner image ships Homebrew but does not put it on PATH.
+        command -v brew >/dev/null || eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+        brew install gitleaks
+        echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
 
     - if: ${{ inputs.package != '' }}
       id: fetch
