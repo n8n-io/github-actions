@@ -21,6 +21,7 @@ jobs:
   package:
     uses: $/.github/workflows/scan-npm-package.yml
     with:
+      # A published community node with known findings, so package mode has something to report.
       package: n8n-nodes-evolution-api
       version: 1.0.4
 

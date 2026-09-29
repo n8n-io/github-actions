@@ -1,5 +1,5 @@
 name: Gitleaks
-description: Scan a published npm package, or the workspace, for hardcoded secrets. Needs a Linux x64 runner with sudo.
+description: Scan a published npm package, or the workspace, for hardcoded secrets.
 
 inputs:
   package:
@@ -18,14 +18,20 @@ runs:
       shell: bash
       env:
         GITLEAKS_VERSION: 8.30.1
-        # SHA-256 of gitleaks_<version>_linux_x64.tar.gz; update when bumping the version.
-        GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        # SHA-256 of gitleaks_<version>_linux_<arch>.tar.gz; update both when bumping the version.
+        GITLEAKS_SHA256_X64: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        GITLEAKS_SHA256_ARM64: e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080
       run: |
-        curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" -o gitleaks.tar.gz
-        echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
-        tar -xzf gitleaks.tar.gz gitleaks
-        sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
-        rm -f gitleaks gitleaks.tar.gz
+        case "$(uname -m)" in
+          x86_64) ARCH=x64; SHA256="$GITLEAKS_SHA256_X64" ;;
+          aarch64|arm64) ARCH=arm64; SHA256="$GITLEAKS_SHA256_ARM64" ;;
+          *) echo "::error::unsupported architecture $(uname -m)"; exit 1 ;;
+        esac
+        mkdir -p "$RUNNER_TEMP/gitleaks"
+        curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_${ARCH}.tar.gz" -o "$RUNNER_TEMP/gitleaks.tar.gz"
+        echo "${SHA256}  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum -c -
+        tar -xzf "$RUNNER_TEMP/gitleaks.tar.gz" -C "$RUNNER_TEMP/gitleaks" gitleaks
+        rm -f "$RUNNER_TEMP/gitleaks.tar.gz"
 
     - if: ${{ inputs.package != '' }}
       id: fetch
@@ -39,4 +45,4 @@ runs:
         TARGET: ${{ steps.fetch.outputs.path }}
       run: |
         # Leaks go to the report and exit 0, so only a scan that cannot run fails the step.
-        gitleaks dir "${TARGET:-.}" --report-format sarif --report-path security-report/gitleaks.sarif --exit-code 0
+        "$RUNNER_TEMP/gitleaks/gitleaks" dir "${TARGET:-.}" --report-format sarif --report-path security-report/gitleaks.sarif --exit-code 0
