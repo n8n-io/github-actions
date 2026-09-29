@@ -31,7 +31,7 @@ runs:
           # Disable Semgrep's default ignores so shipped dist/ code is scanned.
           : > "$TARGET/.semgrepignore"
           SARIF="$PWD/security-report/semgrep.sarif"
-          (cd "$TARGET" && uvx "$(cat "$REQUIREMENTS")" scan --config auto --sarif-output "$SARIF" .)
+          (cd "$TARGET" && uvx --with-requirements "$REQUIREMENTS" semgrep scan --config auto --sarif-output "$SARIF" .)
         else
-          uvx "$(cat "$REQUIREMENTS")" scan --config auto --sarif-output security-report/semgrep.sarif .
+          uvx --with-requirements "$REQUIREMENTS" semgrep scan --config auto --sarif-output security-report/semgrep.sarif .
         fi

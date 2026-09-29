@@ -16,10 +16,10 @@ runs:
         # compgen -G expands a glob and fails when nothing matches, so it doubles as an existence test.
         if compgen -G "$DIR/*.sarif" > /dev/null; then
           # sarif-tools reads every SARIF file in the directory.
-          uvx --from "$(cat "$REQUIREMENTS")" sarif summary "$DIR" > "$REPORT"
+          uvx --with-requirements "$REQUIREMENTS" --from sarif-tools sarif summary "$DIR" > "$REPORT"
           # summary abbreviates each rule, so append the full per-finding CSV.
           CSV="$(mktemp)"
-          uvx --from "$(cat "$REQUIREMENTS")" sarif csv -o "$CSV" "$DIR" >/dev/null
+          uvx --with-requirements "$REQUIREMENTS" --from sarif-tools sarif csv -o "$CSV" "$DIR" >/dev/null
           echo >> "$REPORT"
           # CSV always has a header row; more lines mean actual findings.
           if [ "$(wc -l < "$CSV")" -gt 1 ]; then

@@ -37,10 +37,10 @@ runs:
           if [ -n "$VERSION" ] && [ "$VERSION" != "latest" ]; then
             # --version takes a concrete version, so resolve a dist-tag or range through npm first.
             VERSION="$(npm view "$PACKAGE@$VERSION" version | tail -n 1 | awk '{print $NF}' | tr -d "'")"
-            uvx "$(cat "$REQUIREMENTS")" npm scan $SANDBOX_FLAG "$PACKAGE" --version "$VERSION" | tee security-report/guarddog.txt
+            uvx --with-requirements "$REQUIREMENTS" guarddog npm scan $SANDBOX_FLAG "$PACKAGE" --version "$VERSION" | tee security-report/guarddog.txt
           else
-            uvx "$(cat "$REQUIREMENTS")" npm scan $SANDBOX_FLAG "$PACKAGE" | tee security-report/guarddog.txt
+            uvx --with-requirements "$REQUIREMENTS" guarddog npm scan $SANDBOX_FLAG "$PACKAGE" | tee security-report/guarddog.txt
           fi
         else
-          uvx "$(cat "$REQUIREMENTS")" npm verify $SANDBOX_FLAG --output-format sarif package.json > security-report/guarddog.sarif
+          uvx --with-requirements "$REQUIREMENTS" guarddog npm verify $SANDBOX_FLAG --output-format sarif package.json > security-report/guarddog.sarif
         fi
