@@ -1,4 +1,4 @@
-name: 'Scan npm Package'
+name: 'Scan Community Package'
 
 on:
   workflow_call:
@@ -56,18 +56,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: $/scan-npm-package/actions/setup
-      - uses: $/scan-npm-package/actions/guarddog
+      - uses: $/scan-community-package/actions/setup
+      - uses: $/scan-community-package/actions/guarddog
         with:
           package: ${{ inputs.package }}
           version: ${{ inputs.version }}
           sandbox: ${{ inputs.sandbox }}
       - name: Write summary
         if: always()
-        uses: $/scan-npm-package/actions/security-summary
+        uses: $/scan-community-package/actions/security-summary
       - name: Upload SARIF
         if: always()
-        uses: $/scan-npm-package/actions/upload-security-sarif
+        uses: $/scan-community-package/actions/upload-security-sarif
         with:
           category: guarddog
           package: ${{ inputs.package }}
@@ -78,19 +78,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: $/scan-npm-package/actions/setup
+      - uses: $/scan-community-package/actions/setup
         with:
           node: 'true'
-      - uses: $/scan-npm-package/actions/semgrep
+      - uses: $/scan-community-package/actions/semgrep
         with:
           package: ${{ inputs.package }}
           version: ${{ inputs.version }}
       - name: Write summary
         if: always()
-        uses: $/scan-npm-package/actions/security-summary
+        uses: $/scan-community-package/actions/security-summary
       - name: Upload SARIF
         if: always()
-        uses: $/scan-npm-package/actions/upload-security-sarif
+        uses: $/scan-community-package/actions/upload-security-sarif
         with:
           category: semgrep
           package: ${{ inputs.package }}
@@ -103,16 +103,16 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: $/scan-npm-package/actions/setup
-      - uses: $/scan-npm-package/actions/scorecard
+      - uses: $/scan-community-package/actions/setup
+      - uses: $/scan-community-package/actions/scorecard
         with:
           package: ${{ inputs.package }}
       - name: Write summary
         if: always()
-        uses: $/scan-npm-package/actions/security-summary
+        uses: $/scan-community-package/actions/security-summary
       - name: Upload SARIF
         if: always()
-        uses: $/scan-npm-package/actions/upload-security-sarif
+        uses: $/scan-community-package/actions/upload-security-sarif
         with:
           category: scorecard
           package: ${{ inputs.package }}
@@ -123,19 +123,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: $/scan-npm-package/actions/setup
+      - uses: $/scan-community-package/actions/setup
         with:
           node: 'true'
-      - uses: $/scan-npm-package/actions/cve-lite
+      - uses: $/scan-community-package/actions/cve-lite
         with:
           package: ${{ inputs.package }}
           version: ${{ inputs.version }}
       - name: Write summary
         if: always()
-        uses: $/scan-npm-package/actions/security-summary
+        uses: $/scan-community-package/actions/security-summary
       - name: Upload SARIF
         if: always()
-        uses: $/scan-npm-package/actions/upload-security-sarif
+        uses: $/scan-community-package/actions/upload-security-sarif
         with:
           category: cve-lite
           package: ${{ inputs.package }}
@@ -146,19 +146,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: $/scan-npm-package/actions/setup
+      - uses: $/scan-community-package/actions/setup
         with:
           node: 'true'
-      - uses: $/scan-npm-package/actions/gitleaks
+      - uses: $/scan-community-package/actions/gitleaks
         with:
           package: ${{ inputs.package }}
           version: ${{ inputs.version }}
       - name: Write summary
         if: always()
-        uses: $/scan-npm-package/actions/security-summary
+        uses: $/scan-community-package/actions/security-summary
       - name: Upload SARIF
         if: always()
-        uses: $/scan-npm-package/actions/upload-security-sarif
+        uses: $/scan-community-package/actions/upload-security-sarif
         with:
           category: gitleaks
           package: ${{ inputs.package }}

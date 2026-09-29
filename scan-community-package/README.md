@@ -1,4 +1,4 @@
-# scan-npm-package
+# scan-community-package
 
 Reusable workflow that scans a published npm package, or the calling repository, for security problems before it is trusted. Each scanner runs as its own job, in parallel, and writes a summary to the run's step summary.
 
@@ -6,7 +6,7 @@ Reusable workflow that scans a published npm package, or the calling repository,
 
 | Path | Role |
 |------|------|
-| [`.github/workflows/scan-npm-package.yml`](../.github/workflows/scan-npm-package.yml) | The reusable workflow. Writes the target table and runs one job per scanner |
+| [`.github/workflows/scan-community-package.yml`](../.github/workflows/scan-community-package.yml) | The reusable workflow. Writes the target table and runs one job per scanner |
 | [`actions/guarddog`](./actions/guarddog), [`semgrep`](./actions/semgrep), [`scorecard`](./actions/scorecard), [`cve-lite`](./actions/cve-lite), [`gitleaks`](./actions/gitleaks) | One composite action per scanner, each also usable as a step in your own job |
 | [`actions/setup`](./actions/setup) | Installs uv and optionally Node.js, and creates `security-report/` |
 | [`actions/fetch-package`](./actions/fetch-package) | Downloads and unpacks a package outside the workspace, optionally resolving a lockfile |
@@ -56,7 +56,7 @@ permissions:
 
 jobs:
   scan:
-    uses: n8n-io/github-actions/.github/workflows/scan-npm-package.yml@<sha> # v1.0.0
+    uses: n8n-io/github-actions/.github/workflows/scan-community-package.yml@<sha> # v1.0.0
     with:
       package: ${{ inputs.package }}
       upload-sarif: ${{ inputs.package == '' }}
@@ -64,7 +64,7 @@ jobs:
 
 The upload is skipped on pull requests from forks, whose token is read-only. Triggers and `concurrency` are the caller's as well.
 
-A single scanner can also run as a step in your own job, for example `uses: n8n-io/github-actions/scan-npm-package/actions/gitleaks@<sha>` after the `setup` action.
+A single scanner can also run as a step in your own job, for example `uses: n8n-io/github-actions/scan-community-package/actions/gitleaks@<sha>` after the `setup` action.
 
 ## Two modes
 
@@ -89,4 +89,4 @@ Semgrep and Gitleaks always emit SARIF, and CVE Lite CLI does unless the target 
 
 ## Testing
 
-[`ci-scan-npm-package.yml`](../.github/workflows/ci-scan-npm-package.yml) scans this repository on pull requests that touch this package. Dispatch it with a package name to exercise package mode as well.
+[`ci-scan-community-package.yml`](../.github/workflows/ci-scan-community-package.yml) scans this repository on pull requests that touch this package. Dispatch it with a package name to exercise package mode as well.

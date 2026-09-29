@@ -16,7 +16,7 @@ runs:
   steps:
     - if: ${{ inputs.package != '' }}
       id: fetch
-      uses: $/scan-npm-package/actions/fetch-package
+      uses: $/scan-community-package/actions/fetch-package
       with:
         package: ${{ inputs.package }}
         version: ${{ inputs.version }}

@@ -1,11 +1,11 @@
-name: 'CI: Scan npm Package'
+name: 'CI: Scan Community Package'
 
 on:
   pull_request:
     paths:
-      - '.github/workflows/scan-npm-package.yml'
-      - '.github/workflows/ci-scan-npm-package.yml'
-      - 'scan-npm-package/**'
+      - '.github/workflows/scan-community-package.yml'
+      - '.github/workflows/ci-scan-community-package.yml'
+      - 'scan-community-package/**'
   workflow_dispatch:
     inputs:
       package:
@@ -31,7 +31,7 @@ jobs:
   # workflow runs with the calling job's permissions and cannot elevate them.
   package:
     if: ${{ inputs.package != '' }}
-    uses: $/.github/workflows/scan-npm-package.yml
+    uses: $/.github/workflows/scan-community-package.yml
     with:
       package: ${{ inputs.package }}
       version: ${{ inputs.version }}
@@ -39,4 +39,4 @@ jobs:
   # Scans this repository. The upload stays off: Semgrep and Scorecard do not
   # know `$/` and would report every self-reference here as an unpinned action.
   workspace:
-    uses: $/.github/workflows/scan-npm-package.yml
+    uses: $/.github/workflows/scan-community-package.yml

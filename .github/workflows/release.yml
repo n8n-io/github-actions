@@ -17,7 +17,7 @@ on:
         type: choice
         options:
           - cla-check
-          - scan-npm-package
+          - scan-community-package
       bump:
         description: 'Version bump (first release of an action is always v1.0.0)'
         required: true

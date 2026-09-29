@@ -5,15 +5,15 @@ updates:
     directories:
       - /
       - /cla-check
-      - /scan-npm-package/actions/*
+      - /scan-community-package/actions/*
     schedule:
       interval: weekly
   # Scanner CLIs installed with uvx from a requirements.txt per action.
   - package-ecosystem: pip
     directories:
-      - /scan-npm-package/actions/guarddog
-      - /scan-npm-package/actions/semgrep
-      - /scan-npm-package/actions/security-summary
+      - /scan-community-package/actions/guarddog
+      - /scan-community-package/actions/semgrep
+      - /scan-community-package/actions/security-summary
     schedule:
       interval: weekly
   # Typecheck tooling for the action scripts.
