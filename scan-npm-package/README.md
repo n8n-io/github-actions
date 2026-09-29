@@ -89,4 +89,4 @@ Semgrep and Gitleaks always emit SARIF, and CVE Lite CLI does unless the target 
 
 ## Testing
 
-[`ci-scan-npm-package.yml`](../.github/workflows/ci-scan-npm-package.yml) runs on pull requests that touch this package: once against a published package and once against this repository.
+[`ci-scan-npm-package.yml`](../.github/workflows/ci-scan-npm-package.yml) scans this repository on pull requests that touch this package. Dispatch it with a package name to exercise package mode as well.
