@@ -24,13 +24,14 @@ runs:
     - shell: bash
       env:
         TARGET: ${{ steps.fetch.outputs.path }}
-        SEMGREP_VERSION: 1.178.0
+        # Pinned in requirements.txt so Dependabot can bump it.
+        REQUIREMENTS: ${{ github.action_path }}/requirements.txt
       run: |
         if [ -n "$TARGET" ]; then
           # Disable Semgrep's default ignores so shipped dist/ code is scanned.
           : > "$TARGET/.semgrepignore"
           SARIF="$PWD/security-report/semgrep.sarif"
-          (cd "$TARGET" && uvx "semgrep==$SEMGREP_VERSION" scan --config auto --sarif-output "$SARIF" .)
+          (cd "$TARGET" && uvx "$(cat "$REQUIREMENTS")" scan --config auto --sarif-output "$SARIF" .)
         else
-          uvx "semgrep==$SEMGREP_VERSION" scan --config auto --sarif-output security-report/semgrep.sarif .
+          uvx "$(cat "$REQUIREMENTS")" scan --config auto --sarif-output security-report/semgrep.sarif .
         fi

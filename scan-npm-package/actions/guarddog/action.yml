@@ -23,7 +23,8 @@ runs:
         PACKAGE: ${{ inputs.package }}
         VERSION: ${{ inputs.version }}
         SANDBOX: ${{ inputs.sandbox }}
-        GUARDDOG_VERSION: 3.2.0
+        # Pinned in requirements.txt so Dependabot can bump it.
+        REQUIREMENTS: ${{ github.action_path }}/requirements.txt
       run: |
         # pipefail so a GuardDog failure isn't masked by tee's exit code.
         set -o pipefail
@@ -36,10 +37,10 @@ runs:
           if [ -n "$VERSION" ] && [ "$VERSION" != "latest" ]; then
             # --version takes a concrete version, so resolve a dist-tag or range through npm first.
             VERSION="$(npm view "$PACKAGE@$VERSION" version | tail -n 1 | awk '{print $NF}' | tr -d "'")"
-            uvx "guarddog==$GUARDDOG_VERSION" npm scan $SANDBOX_FLAG "$PACKAGE" --version "$VERSION" | tee security-report/guarddog.txt
+            uvx "$(cat "$REQUIREMENTS")" npm scan $SANDBOX_FLAG "$PACKAGE" --version "$VERSION" | tee security-report/guarddog.txt
           else
-            uvx "guarddog==$GUARDDOG_VERSION" npm scan $SANDBOX_FLAG "$PACKAGE" | tee security-report/guarddog.txt
+            uvx "$(cat "$REQUIREMENTS")" npm scan $SANDBOX_FLAG "$PACKAGE" | tee security-report/guarddog.txt
           fi
         else
-          uvx "guarddog==$GUARDDOG_VERSION" npm verify $SANDBOX_FLAG --output-format sarif package.json > security-report/guarddog.sarif
+          uvx "$(cat "$REQUIREMENTS")" npm verify $SANDBOX_FLAG --output-format sarif package.json > security-report/guarddog.sarif
         fi

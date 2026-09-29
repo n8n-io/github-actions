@@ -6,7 +6,8 @@ runs:
   steps:
     - shell: bash
       env:
-        SARIF_TOOLS_VERSION: 3.0.5
+        # Pinned in requirements.txt so Dependabot can bump it.
+        REQUIREMENTS: ${{ github.action_path }}/requirements.txt
       run: |
         # Every scanner writes its report into this directory, created by the setup action.
         DIR=security-report
@@ -15,10 +16,10 @@ runs:
         # compgen -G expands a glob and fails when nothing matches, so it doubles as an existence test.
         if compgen -G "$DIR/*.sarif" > /dev/null; then
           # sarif-tools reads every SARIF file in the directory.
-          uvx --from "sarif-tools==$SARIF_TOOLS_VERSION" sarif summary "$DIR" > "$REPORT"
+          uvx --from "$(cat "$REQUIREMENTS")" sarif summary "$DIR" > "$REPORT"
           # summary abbreviates each rule, so append the full per-finding CSV.
           CSV="$(mktemp)"
-          uvx --from "sarif-tools==$SARIF_TOOLS_VERSION" sarif csv -o "$CSV" "$DIR" >/dev/null
+          uvx --from "$(cat "$REQUIREMENTS")" sarif csv -o "$CSV" "$DIR" >/dev/null
           echo >> "$REPORT"
           # CSV always has a header row; more lines mean actual findings.
           if [ "$(wc -l < "$CSV")" -gt 1 ]; then
