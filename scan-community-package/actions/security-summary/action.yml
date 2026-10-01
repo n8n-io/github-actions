@@ -32,7 +32,7 @@ runs:
           # Scorecard cannot emit SARIF for a third-party package, so it leaves plain text.
           cat "$DIR"/*.txt > "$REPORT"
         else
-          # Nothing was written, for example a package with no lockfile. Leave the summary untouched.
+          # Nothing was written. Leave the summary untouched.
           exit 0
         fi
         # Escape a backtick that opens a line, allowing up to three spaces of indentation, so
