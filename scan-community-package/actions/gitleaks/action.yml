@@ -21,7 +21,8 @@ runs:
         HOMEBREW_NO_AUTO_UPDATE: '1'
         HOMEBREW_NO_INSTALL_CLEANUP: '1'
       run: |
-        # The Ubuntu runner image ships Homebrew but does not put it on PATH.
+        # Unpinned by choice: Homebrew's current Gitleaks, in exchange for no download, checksum
+        # or architecture handling. The Ubuntu runner image ships Homebrew but not on PATH.
         command -v brew >/dev/null || eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
         brew install gitleaks
         echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
