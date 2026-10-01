@@ -1,0 +1,37 @@
+name: Semgrep
+description: Scan a published npm package, or the workspace, for insecure code patterns.
+
+inputs:
+  package:
+    description: npm package name. Leave empty to scan the workspace.
+    required: false
+    default: ''
+  version:
+    description: Package version or dist-tag.
+    required: false
+    default: latest
+
+runs:
+  using: composite
+  steps:
+    - if: ${{ inputs.package != '' }}
+      id: fetch
+      uses: $/scan-community-package/actions/fetch-package
+      with:
+        package: ${{ inputs.package }}
+        version: ${{ inputs.version }}
+
+    - shell: bash
+      env:
+        TARGET: ${{ steps.fetch.outputs.path }}
+        # Pinned in requirements.txt so Dependabot can bump it.
+        REQUIREMENTS: ${{ github.action_path }}/requirements.txt
+      run: |
+        if [ -n "$TARGET" ]; then
+          # Disable Semgrep's default ignores so shipped dist/ code is scanned.
+          : > "$TARGET/.semgrepignore"
+          SARIF="$PWD/security-report/semgrep.sarif"
+          (cd "$TARGET" && uvx --with-requirements "$REQUIREMENTS" semgrep scan --config auto --sarif-output "$SARIF" .)
+        else
+          uvx --with-requirements "$REQUIREMENTS" semgrep scan --config auto --sarif-output security-report/semgrep.sarif .
+        fi

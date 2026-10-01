@@ -1,0 +1,49 @@
+name: Security summary
+description: Render the scan report in security-report/ into the job step summary.
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        # Pinned in requirements.txt so Dependabot can bump it.
+        REQUIREMENTS: ${{ github.action_path }}/requirements.txt
+      run: |
+        # Every scanner writes its report into this directory, created by the setup action.
+        DIR=security-report
+        # The rendered text is collected here first, then appended to the step summary in one go.
+        REPORT="$(mktemp)"
+        # compgen -G expands a glob and fails when nothing matches, so it doubles as an existence test.
+        if compgen -G "$DIR/*.sarif" > /dev/null; then
+          # sarif-tools reads every SARIF file in the directory.
+          uvx --with-requirements "$REQUIREMENTS" --from sarif-tools sarif summary "$DIR" > "$REPORT"
+          # summary abbreviates each rule, so append the full per-finding CSV.
+          CSV="$(mktemp)"
+          uvx --with-requirements "$REQUIREMENTS" --from sarif-tools sarif csv -o "$CSV" "$DIR" >/dev/null
+          echo >> "$REPORT"
+          # CSV always has a header row; more lines mean actual findings.
+          if [ "$(wc -l < "$CSV")" -gt 1 ]; then
+            cat "$CSV" >> "$REPORT"
+          else
+            echo 'No findings.' >> "$REPORT"
+          fi
+          rm -f "$CSV"
+        elif compgen -G "$DIR/*.txt" > /dev/null; then
+          # Scorecard cannot emit SARIF for a third-party package, so it leaves plain text.
+          cat "$DIR"/*.txt > "$REPORT"
+        else
+          # Nothing was written. Leave the summary untouched.
+          exit 0
+        fi
+        # Escape a backtick that opens a line, allowing up to three spaces of indentation, so
+        # untrusted scan output can't close the code fence and inject markdown into the summary.
+        sed 's/^\( \{0,3\}\)`/\1\\`/' "$REPORT" > "$REPORT.escaped" && mv "$REPORT.escaped" "$REPORT"
+        # $GITHUB_STEP_SUMMARY is the markdown shown on the run's summary page.
+        {
+          echo '```'
+          cat "$REPORT"
+          # Newline so output without a trailing one doesn't glue to the fence.
+          echo
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+        rm -f "$REPORT"
