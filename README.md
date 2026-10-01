@@ -1,13 +1,13 @@
 # n8n-io/github-actions
 
-Shared GitHub Actions used across `n8n-io` repositories.
+Shared GitHub Actions and reusable workflows used across `n8n-io` repositories.
 
-| Action | Description |
+| Action or workflow | Description |
 |--------|-------------|
 | [`cla-check`](./cla-check) | Verify every contributor on a PR has signed the n8n CLA |
 | [`scan-community-package`](./scan-community-package) | Reusable workflow: scan a published npm package or the calling repository for malware, insecure code, misconfiguration, vulnerable dependencies and secrets |
 
-## Consuming an action
+## Consuming an action or workflow
 
 Reference the action by path, pinned to a commit SHA with the version in a
 trailing comment:
