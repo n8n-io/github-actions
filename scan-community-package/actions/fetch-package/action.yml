@@ -1,5 +1,5 @@
 name: Fetch npm package
-description: Download an npm package, unpack it outside the workspace and optionally resolve a lockfile for it.
+description: Download an npm package and unpack it outside the workspace.
 
 inputs:
   package:
@@ -9,10 +9,6 @@ inputs:
     description: Package version or dist-tag.
     required: false
     default: latest
-  lockfile:
-    description: Whether to resolve a package-lock.json for the unpacked package.
-    required: false
-    default: 'false'
 
 outputs:
   path:
@@ -27,7 +23,6 @@ runs:
       env:
         PACKAGE: ${{ inputs.package }}
         VERSION: ${{ inputs.version }}
-        LOCKFILE: ${{ inputs.lockfile }}
       run: |
         # Unpack outside the workspace so the caller's own files are never scanned.
         DIR="$RUNNER_TEMP/npm-package"
@@ -38,11 +33,4 @@ runs:
         # The tarball wraps everything in a package/ folder; strip that level.
         tar -xzf "$ARCHIVE" -C "$DIR" --strip-components=1
         rm -f "$ARCHIVE"
-        if [ "$LOCKFILE" = "true" ]; then
-          # npm reads the project's .npmrc first; a shipped one must not steer the scan.
-          rm -f "$DIR/.npmrc"
-          # Tarballs ship no lockfile; without one only pinned direct deps are scanned.
-          # --package-lock-only resolves the tree without downloading or running anything.
-          (cd "$DIR" && npm install --package-lock-only --ignore-scripts --no-audit --no-fund)
-        fi
         echo "path=$DIR" >> "$GITHUB_OUTPUT"

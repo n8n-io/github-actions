@@ -7,9 +7,9 @@ Reusable workflow that scans a published npm package, or the calling repository,
 | Path | Role |
 |------|------|
 | [`.github/workflows/scan-community-package.yml`](../.github/workflows/scan-community-package.yml) | The reusable workflow. Writes the target table and runs one job per scanner |
-| [`actions/guarddog`](./actions/guarddog), [`semgrep`](./actions/semgrep), [`scorecard`](./actions/scorecard), [`cve-lite`](./actions/cve-lite), [`gitleaks`](./actions/gitleaks) | One composite action per scanner, each also usable as a step in your own job |
+| [`actions/semgrep`](./actions/semgrep), [`scorecard`](./actions/scorecard), [`gitleaks`](./actions/gitleaks) | One composite action per scanner, each also usable as a step in your own job |
 | [`actions/setup`](./actions/setup) | Installs uv and optionally Node.js, and creates `security-report/` |
-| [`actions/fetch-package`](./actions/fetch-package) | Downloads and unpacks a package outside the workspace, optionally resolving a lockfile |
+| [`actions/fetch-package`](./actions/fetch-package) | Downloads and unpacks a package outside the workspace |
 | [`actions/security-summary`](./actions/security-summary) | Renders the reports in `security-report/` into the step summary |
 | [`actions/upload-security-sarif`](./actions/upload-security-sarif) | Uploads the SARIF reports to code scanning when the caller opts in |
 
@@ -19,10 +19,8 @@ Reusable workflows must live in `.github/workflows/`, which is why the workflow 
 
 | Job | Tool | Area of concern |
 |-----|------|-----------------|
-| `scan-for-malware` | [GuardDog](https://github.com/DataDog/guarddog) | Malicious and supply-chain behavior (install scripts, obfuscation, exfiltration, typosquatting) |
 | `scan-for-insecure-code` | [Semgrep](https://github.com/semgrep/semgrep) | Insecure code patterns (static analysis) |
 | `scan-for-misconfiguration` | [OpenSSF Scorecard](https://github.com/ossf/scorecard) | Security posture of the source repository (branch protection, pinned dependencies, CI hardening) |
-| `scan-for-vulnerabilities` | [CVE Lite CLI](https://github.com/OWASP/cve-lite-cli) | Known vulnerabilities (CVEs) in the dependency tree, matched against OSV and the npm advisory API, with the upgrade commands that fix them |
 | `scan-for-secrets` | [Gitleaks](https://github.com/gitleaks/gitleaks) | Hardcoded secrets and leaked credentials |
 
 Every scanner reports; none of them fails its job on findings. A job fails only when a scanner cannot run.
@@ -68,9 +66,9 @@ A single scanner can also run as a step in your own job, for example `uses: n8n-
 
 ## Two modes
 
-**Published package.** Set `package` (and optionally `version`) to download and scan an npm package. Its tarball is unpacked outside the workspace, and the dependency scan resolves a lockfile so the whole tree is covered. Findings show up in the step summary only: they belong to another project and are never uploaded to the caller's code scanning.
+**Published package.** Set `package` (and optionally `version`) to download and scan an npm package. Its tarball is unpacked outside the workspace. Findings show up in the step summary only: they belong to another project and are never uploaded to the caller's code scanning.
 
-**Repository.** Leave `package` empty to scan the calling repository, which needs a `package.json`. With `upload-sarif` enabled the SARIF reports are uploaded to GitHub code scanning, so findings appear under **Security → Code scanning** next to CodeQL and other analyses. Uploading needs GitHub Code Security on the repository.
+**Repository.** Leave `package` empty to scan the calling repository. With `upload-sarif` enabled the SARIF reports are uploaded to GitHub code scanning, so findings appear under **Security → Code scanning** next to CodeQL and other analyses. Uploading needs GitHub Code Security on the repository.
 
 ## Inputs
 
@@ -78,14 +76,13 @@ A single scanner can also run as a step in your own job, for example `uses: n8n-
 |-------|---------|-------------|
 | `package` | empty | npm package name, e.g. `express` or `@scope/pkg`. Leave empty to scan the calling repository. |
 | `version` | `latest` | Package version or dist-tag to scan. Scorecard ignores it, since it scores the package's source repository rather than a release. |
-| `sandbox` | `true` | Whether GuardDog should run inside its kernel-level sandbox. |
 | `upload-sarif` | `false` | Whether to upload SARIF reports to GitHub code scanning. Only applies when scanning the calling repository. |
 
 ## Results
 
 Every scan writes a human-readable summary to the workflow run's step summary. Each scanner writes its report files into a `security-report/` directory in the workspace.
 
-Semgrep and Gitleaks always emit SARIF, and CVE Lite CLI does unless the target has no lockfile. GuardDog and Scorecard emit SARIF when scanning the calling repository and their native text report for a published package, since they cannot emit SARIF in that mode.
+Semgrep and Gitleaks always emit SARIF. Scorecard emits SARIF when scanning the calling repository and its native text report for a published package, since it cannot emit SARIF in that mode.
 
 ## Testing
 

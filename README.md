@@ -5,7 +5,7 @@ Shared GitHub Actions and reusable workflows used across `n8n-io` repositories.
 | Action or workflow | Description |
 |--------|-------------|
 | [`cla-check`](./cla-check) | Verify every contributor on a PR has signed the n8n CLA |
-| [`scan-community-package`](./scan-community-package) | Reusable workflow: scan a published npm package or the calling repository for malware, insecure code, misconfiguration, vulnerable dependencies and secrets |
+| [`scan-community-package`](./scan-community-package) | Reusable workflow: scan a published npm package or the calling repository for insecure code, misconfiguration and secrets |
 
 ## Consuming an action or workflow
 

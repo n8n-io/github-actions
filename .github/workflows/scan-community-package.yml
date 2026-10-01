@@ -12,11 +12,6 @@ on:
         required: false
         default: 'latest'
         type: string
-      sandbox:
-        description: 'Whether GuardDog should run inside its kernel-level sandbox.'
-        required: false
-        default: true
-        type: boolean
       upload-sarif:
         description: 'Whether to upload SARIF reports to GitHub code scanning.'
         required: false
@@ -50,28 +45,6 @@ jobs:
             echo "| --- | --- |"
             echo "| $TARGET | $SCANNED_VERSION |"
           } >> "$GITHUB_STEP_SUMMARY"
-
-  scan-for-malware:
-    name: GuardDog
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: $/scan-community-package/actions/setup
-      - uses: $/scan-community-package/actions/guarddog
-        with:
-          package: ${{ inputs.package }}
-          version: ${{ inputs.version }}
-          sandbox: ${{ inputs.sandbox }}
-      - name: Write summary
-        if: always()
-        uses: $/scan-community-package/actions/security-summary
-      - name: Upload SARIF
-        if: always()
-        uses: $/scan-community-package/actions/upload-security-sarif
-        with:
-          category: guarddog
-          package: ${{ inputs.package }}
-          upload: ${{ inputs.upload-sarif }}
 
   scan-for-insecure-code:
     name: Semgrep
@@ -115,29 +88,6 @@ jobs:
         uses: $/scan-community-package/actions/upload-security-sarif
         with:
           category: scorecard
-          package: ${{ inputs.package }}
-          upload: ${{ inputs.upload-sarif }}
-
-  scan-for-vulnerabilities:
-    name: CVE Lite CLI
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: $/scan-community-package/actions/setup
-        with:
-          node: 'true'
-      - uses: $/scan-community-package/actions/cve-lite
-        with:
-          package: ${{ inputs.package }}
-          version: ${{ inputs.version }}
-      - name: Write summary
-        if: always()
-        uses: $/scan-community-package/actions/security-summary
-      - name: Upload SARIF
-        if: always()
-        uses: $/scan-community-package/actions/upload-security-sarif
-        with:
-          category: cve-lite
           package: ${{ inputs.package }}
           upload: ${{ inputs.upload-sarif }}
 

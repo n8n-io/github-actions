@@ -29,7 +29,7 @@ runs:
           fi
           rm -f "$CSV"
         elif compgen -G "$DIR/*.txt" > /dev/null; then
-          # GuardDog and Scorecard cannot emit SARIF for a third-party package, so they leave plain text.
+          # Scorecard cannot emit SARIF for a third-party package, so it leaves plain text.
           cat "$DIR"/*.txt > "$REPORT"
         else
           # Nothing was written, for example a package with no lockfile. Leave the summary untouched.
