@@ -1,0 +1,29 @@
+.github/workflows/approve-and-set-automerge.yml
+  s_517862cfa163b1::t_f2e85aa88fc7b1 44-47,49-54,63-64
+  s_517862cfa163b1::t_d427a109b6e786 24-29
+  s_517862cfa163b1::t_1e43558e1271c3 12-16,74
+  s_517862cfa163b1::t_410c5235832297 9
+  s_517862cfa163b1::t_e02ce250e218b6 1-8,10-11,17-23,30-43,48,55-62,65-73,75-79
+approve-and-set-automerge/README.md
+  s_517862cfa163b1::t_1e43558e1271c3 3-5,18,34,49
+  s_517862cfa163b1::t_410c5235832297 23,48
+  s_517862cfa163b1::t_e02ce250e218b6 1-2,6-17,19-22,24-33,35-47,50-56
+README.md
+  s_517862cfa163b1::t_1e43558e1271c3 8
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8fe337080c0386a17ce3c857b61db606c9430f4b",
+  "prompts": {},
+  "sessions": {
+    "s_517862cfa163b1": {
+      "agent_id": {
+        "tool": "opencode",
+        "id": "ses_e87d4dfddffeMDfR92c0WCFhWN",
+        "model": "openai/gpt-5.6-sol"
+      },
+      "human_author": "Matsuuu <matias.huhta@n8n.io>"
+    }
+  }
+}
