@@ -5,6 +5,7 @@ Shared GitHub Actions used across `n8n-io` repositories.
 | Action | Description |
 |--------|-------------|
 | [`cla-check`](./cla-check) | Verify every contributor on a PR has signed the n8n CLA |
+| [`approve-and-set-automerge`](./approve-and-set-automerge) | Approve a PR as a GitHub App and optionally enable squash automerge |
 
 ## Consuming an action
 

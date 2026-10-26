@@ -1,0 +1,79 @@
+name: Approve and set automerge
+
+run-name: Approve and automerge PR ${{ inputs.pull-request-number }}
+
+on:
+  workflow_call:
+    inputs:
+      pull-request-number:
+        description: 'Pull request number to approve'
+        type: string
+        required: true
+      enable-automerge:
+        description: 'Whether to enable squash automerge after approving the pull request'
+        type: boolean
+        required: false
+        default: false
+    secrets:
+      app-id:
+        description: 'Optional GitHub App ID; defaults to N8N_RELEASE_HELPER_APP_ID'
+        required: false
+      private-key:
+        description: 'Optional GitHub App private key; defaults to N8N_RELEASE_HELPER_PRIVATE_KEY'
+        required: false
+      N8N_RELEASE_HELPER_APP_ID:
+        description: 'Default GitHub App ID inherited from the calling repository'
+        required: false
+      N8N_RELEASE_HELPER_PRIVATE_KEY:
+        description: 'Default GitHub App private key inherited from the calling repository'
+        required: false
+
+permissions: {}
+
+jobs:
+  approve-and-automerge:
+    if: inputs.pull-request-number != ''
+    runs-on: ubuntu-slim
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Validate credentials
+        env:
+          CUSTOM_APP_ID: ${{ secrets.app-id }}
+          CUSTOM_PRIVATE_KEY: ${{ secrets.private-key }}
+          DEFAULT_APP_ID: ${{ secrets.N8N_RELEASE_HELPER_APP_ID }}
+          DEFAULT_PRIVATE_KEY: ${{ secrets.N8N_RELEASE_HELPER_PRIVATE_KEY }}
+        run: |
+          if { [ -n "$CUSTOM_APP_ID" ] && [ -z "$CUSTOM_PRIVATE_KEY" ]; } || \
+             { [ -z "$CUSTOM_APP_ID" ] && [ -n "$CUSTOM_PRIVATE_KEY" ]; }; then
+            echo "::error::app-id and private-key must be passed together."
+            exit 1
+          fi
+          if [ -z "$CUSTOM_APP_ID" ] && { [ -z "$DEFAULT_APP_ID" ] || [ -z "$DEFAULT_PRIVATE_KEY" ]; }; then
+            echo "::error::GitHub App credentials are unavailable. Use secrets: inherit or pass app-id and private-key."
+            exit 1
+          fi
+
+      - name: Generate GitHub App token
+        id: generate-token
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        with:
+          app-id: ${{ secrets.app-id && secrets.private-key && secrets.app-id || secrets.N8N_RELEASE_HELPER_APP_ID }}
+          private-key: ${{ secrets.app-id && secrets.private-key && secrets.private-key || secrets.N8N_RELEASE_HELPER_PRIVATE_KEY }}
+
+      - name: Approve PR as the App
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          PR_NUMBER: ${{ inputs.pull-request-number }}
+          REPOSITORY: ${{ github.repository }}
+        run: gh pr review "$PR_NUMBER" --approve --repo "$REPOSITORY"
+
+      - name: Enable squash automerge
+        if: inputs.enable-automerge
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          PR_NUMBER: ${{ inputs.pull-request-number }}
+          REPOSITORY: ${{ github.repository }}
+        run: gh pr merge "$PR_NUMBER" --auto --squash --repo "$REPOSITORY"
