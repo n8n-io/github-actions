@@ -1,0 +1,42 @@
+name: Gitleaks
+description: Scan a published npm package, or the workspace, for hardcoded secrets.
+
+inputs:
+  package:
+    description: npm package name. Leave empty to scan the workspace.
+    required: false
+    default: ''
+  version:
+    description: Package version or dist-tag.
+    required: false
+    default: latest
+
+runs:
+  using: composite
+  steps:
+    - name: Install Gitleaks
+      shell: bash
+      env:
+        # The runner image's formula snapshot is recent; skipping the tap update saves a minute.
+        HOMEBREW_NO_AUTO_UPDATE: '1'
+        HOMEBREW_NO_INSTALL_CLEANUP: '1'
+      run: |
+        # Unpinned by choice: Homebrew's current Gitleaks, in exchange for no download, checksum
+        # or architecture handling. The Ubuntu runner image ships Homebrew but not on PATH.
+        command -v brew >/dev/null || eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+        brew install gitleaks
+        echo "$(brew --prefix)/bin" >> "$GITHUB_PATH"
+
+    - if: ${{ inputs.package != '' }}
+      id: fetch
+      uses: $/scan-community-package/actions/fetch-package
+      with:
+        package: ${{ inputs.package }}
+        version: ${{ inputs.version }}
+
+    - shell: bash
+      env:
+        TARGET: ${{ steps.fetch.outputs.path }}
+      run: |
+        # Leaks go to the report and exit 0, so only a scan that cannot run fails the step.
+        gitleaks dir "${TARGET:-.}" --report-format sarif --report-path security-report/gitleaks.sarif --exit-code 0

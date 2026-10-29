@@ -1,0 +1,36 @@
+name: Fetch npm package
+description: Download an npm package and unpack it outside the workspace.
+
+inputs:
+  package:
+    description: npm package name.
+    required: true
+  version:
+    description: Package version or dist-tag.
+    required: false
+    default: latest
+
+outputs:
+  path:
+    description: Directory holding the unpacked package.
+    value: ${{ steps.fetch.outputs.path }}
+
+runs:
+  using: composite
+  steps:
+    - id: fetch
+      shell: bash
+      env:
+        PACKAGE: ${{ inputs.package }}
+        VERSION: ${{ inputs.version }}
+      run: |
+        # Unpack outside the workspace so the caller's own files are never scanned.
+        DIR="$RUNNER_TEMP/npm-package"
+        rm -rf "$DIR" && mkdir -p "$DIR"
+        # npm pack downloads <name>-<version>.tgz into the working directory and prints that file name.
+        # It runs under the caller's own npm config, so a private registry set there is honoured.
+        ARCHIVE="$(npm pack --silent "$PACKAGE@$VERSION")"
+        # The tarball wraps everything in a package/ folder; strip that level.
+        tar -xzf "$ARCHIVE" -C "$DIR" --strip-components=1
+        rm -f "$ARCHIVE"
+        echo "path=$DIR" >> "$GITHUB_OUTPUT"

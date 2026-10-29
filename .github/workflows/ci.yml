@@ -26,15 +26,13 @@ jobs:
 
       - run: pnpm typecheck
 
-      - name: Release dropdown covers every action
+      - name: Release dropdown covers every package
         run: |
-          set -euo pipefail
-          missing=0
-          for path in */action.yml; do
-            name="${path%/action.yml}"
-            grep -qE "^ +- ${name}$" .github/workflows/release.yml || {
-              echo "::error::'${name}' is missing from the package options in .github/workflows/release.yml"
-              missing=1
+          # Every package, action or reusable workflow, is a top-level directory with a README.
+          for readme in */README.md; do
+            package="${readme%/README.md}"
+            grep -qE "^ +- $package$" .github/workflows/release.yml || {
+              echo "::error::'$package' is missing from the package options in .github/workflows/release.yml"
+              exit 1
             }
           done
-          exit $missing

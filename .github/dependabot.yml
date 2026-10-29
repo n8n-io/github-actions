@@ -1,0 +1,22 @@
+version: 2
+updates:
+  # SHA pins in the workflows and in every composite action directory.
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /cla-check
+      - /scan-community-package/actions/*
+    schedule:
+      interval: weekly
+  # Scanner CLIs installed with uvx from a requirements.txt per action.
+  - package-ecosystem: pip
+    directories:
+      - /scan-community-package/actions/semgrep
+      - /scan-community-package/actions/security-summary
+    schedule:
+      interval: weekly
+  # Typecheck tooling for the action scripts.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly

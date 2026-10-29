@@ -1,0 +1,42 @@
+name: 'CI: Scan Community Package'
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/scan-community-package.yml'
+      - '.github/workflows/ci-scan-community-package.yml'
+      - 'scan-community-package/**'
+  workflow_dispatch:
+    inputs:
+      package:
+        description: 'npm package to scan in addition to this repository. Leave empty to skip.'
+        required: false
+        type: string
+      version:
+        description: 'Package version or dist-tag.'
+        required: false
+        default: 'latest'
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Package mode runs on demand: dispatch the workflow with a package name.
+  # A consumer that only scans packages needs nothing beyond contents: read. The called
+  # workflow runs with the calling job's permissions and cannot elevate them.
+  package:
+    if: ${{ inputs.package != '' }}
+    uses: $/.github/workflows/scan-community-package.yml
+    with:
+      package: ${{ inputs.package }}
+      version: ${{ inputs.version }}
+
+  # Scans this repository. The upload stays off: Semgrep and Scorecard do not
+  # know `$/` and would report every self-reference here as an unpinned action.
+  workspace:
+    uses: $/.github/workflows/scan-community-package.yml
