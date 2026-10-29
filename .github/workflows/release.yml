@@ -16,6 +16,7 @@ on:
         required: true
         type: choice
         options:
+          - approve-and-set-automerge
           - cla-check
           - scan-community-package
       bump:
