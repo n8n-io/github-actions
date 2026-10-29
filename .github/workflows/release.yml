@@ -85,10 +85,10 @@ jobs:
           # in .github/workflows/<package>.yml, with its docs and helper actions
           # under <package>/.
           if [ -f "$PACKAGE/action.yml" ]; then
-            uses_path="$PACKAGE"
+            ref_path="$PACKAGE"
             paths="$PACKAGE"
           elif [ -f ".github/workflows/$PACKAGE.yml" ]; then
-            uses_path=".github/workflows/$PACKAGE.yml"
+            ref_path=".github/workflows/$PACKAGE.yml"
             paths=".github/workflows/$PACKAGE.yml $PACKAGE"
           else
             echo "::error::neither $PACKAGE/action.yml nor .github/workflows/$PACKAGE.yml found"
@@ -124,7 +124,7 @@ jobs:
             echo "tag=$tag"
             echo "version=$next"
             echo "prev_tag=${prev_version:+$PACKAGE/v$prev_version}"
-            echo "uses_path=$uses_path"
+            echo "ref_path=$ref_path"
             echo "paths=$paths"
           } >> "$GITHUB_OUTPUT"
 
@@ -134,7 +134,7 @@ jobs:
           PACKAGE: ${{ inputs.package }}
           VERSION: ${{ steps.version.outputs.version }}
           PREV_TAG: ${{ steps.version.outputs.prev_tag }}
-          USES_PATH: ${{ steps.version.outputs.uses_path }}
+          REF_PATH: ${{ steps.version.outputs.ref_path }}
           PATHS: ${{ steps.version.outputs.paths }}
           SHA: ${{ github.sha }}
         run: |
@@ -147,7 +147,7 @@ jobs:
           # shellcheck disable=SC2086
           {
             echo '```yaml'
-            echo "- uses: ${{ github.repository }}/$USES_PATH@$SHA # v$VERSION"
+            echo "- uses: ${{ github.repository }}/$REF_PATH@$SHA # v$VERSION"
             echo '```'
             echo
             echo "### Changes"
