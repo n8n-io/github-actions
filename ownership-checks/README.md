@@ -4,22 +4,26 @@ Reusable workflow that runs the `OWNERS` checks in DevHub. DevHub reads the
 repository's `OWNERS` file from its default branch and does all the work; this
 workflow only tells DevHub which pull request to look at.
 
-| Job | What DevHub does |
-|-----|------------------|
-| `required-reviews` | Writes the `Required Reviews` commit status: a member of each team with a `required` entry for a changed file must approve |
-| `merge-queue` | Passes `Required Reviews` on merge queue commits |
-| `ownership-comment` | Posts or updates the PR review overview comment: owning teams, changed lines, and required teams |
+| Check | What DevHub does |
+|-------|------------------|
+| Required reviews | Writes the `Required Reviews` commit status: a member of each team with a `required` entry for a changed file must approve |
+| Merge queue | Passes `Required Reviews` on merge queue commits |
+| Ownership comment | Posts or updates the PR review overview comment: owning teams, changed lines, and required teams |
+
+All checks run as steps of one job, `Ownership checks`. A pull request shows one
+check per event type, and only events that need no check at all show it as
+skipped.
 
 ## Layout
 
 | Path | Role |
 |------|------|
-| [`.github/workflows/ownership-checks.yml`](../.github/workflows/ownership-checks.yml) | The reusable workflow. One job per check |
+| [`.github/workflows/ownership-checks.yml`](../.github/workflows/ownership-checks.yml) | The reusable workflow. One job, with a step per check |
 | [`actions/call-devhub`](./actions/call-devhub) | Gets a GitHub Actions OIDC token and calls a DevHub CI API, with retries |
 
 ## Authentication
 
-There is no secret. Each job requests a GitHub Actions OIDC token for the
+There is no secret. The job requests a GitHub Actions OIDC token for the
 audience `devhub` (`permissions: id-token: write`), and DevHub verifies it.
 DevHub only accepts tokens from `n8n-io` repositories and takes the repository
 and the run from the token, so a repository can only act on its own pull
@@ -31,7 +35,7 @@ pin.
 ## Usage
 
 Add a workflow like this to the repository and replace the pinned SHA. The
-triggers decide which checks can run; each job ignores the events that cannot
+triggers decide which checks can run; each step ignores the events that cannot
 change its result.
 
 ```yaml
