@@ -1,0 +1,84 @@
+name: Call DevHub
+description: >-
+  POST to a DevHub CI API with a GitHub Actions OIDC token for the audience `devhub`.
+  The job needs `permissions: id-token: write`.
+
+inputs:
+  devhub-url:
+    description: 'DevHub base URL, for example https://devhub.example.com'
+    required: true
+  path:
+    description: 'API path, for example /api/v1/ci/ownership-comment'
+    required: true
+  body:
+    description: 'JSON request body'
+    required: false
+    default: '{}'
+  max-time:
+    description: 'Seconds to wait for one attempt. Three attempts and their pauses must fit in the job timeout'
+    required: false
+    default: '60'
+
+runs:
+  using: composite
+  steps:
+    - name: Call DevHub
+      shell: bash
+      env:
+        DEVHUB_URL: ${{ inputs.devhub-url }}
+        API_PATH: ${{ inputs.path }}
+        BODY: ${{ inputs.body }}
+        MAX_TIME: ${{ inputs.max-time }}
+      run: |
+        set -euo pipefail
+        if [ -z "$DEVHUB_URL" ]; then
+          echo "::error::Set the DEVHUB_URL variable or pass devhub-url."
+          exit 1
+        fi
+        if [[ "$DEVHUB_URL" != https://* ]]; then
+          echo "::error::DEVHUB_URL must start with https://, because the request carries a token."
+          exit 1
+        fi
+        if [ -z "${ACTIONS_ID_TOKEN_REQUEST_URL:-}" ]; then
+          echo "::error::The job needs permissions: id-token: write."
+          exit 1
+        fi
+
+        url="${DEVHUB_URL%/}${API_PATH}"
+        response="$(mktemp)"
+        for attempt in 1 2 3; do
+          # A new token for each attempt: a token expires after a few minutes, and DevHub can wait up to 3 minutes for a lock.
+          if token="$(curl -sSf --max-time 30 -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+            "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=devhub" | jq -er .value)"; then
+            echo "::add-mask::$token"
+            status="$(curl -sS -o "$response" -w '%{http_code}' --max-time "$MAX_TIME" -X POST \
+              -H "Authorization: Bearer $token" \
+              -H 'Content-Type: application/json' \
+              --data "$BODY" "$url")" || status=000
+          else
+            echo "::warning::Could not get a GitHub Actions token (attempt $attempt of 3)."
+            status=token
+            : > "$response"
+          fi
+
+          case "$status" in
+            2??)
+              cat "$response"
+              echo
+              exit 0
+              ;;
+            408 | 429) ;;
+            4??)
+              cat "$response"
+              echo
+              echo "::error::DevHub answered HTTP $status."
+              exit 1
+              ;;
+          esac
+          [ "$status" = token ] || echo "::warning::DevHub answered HTTP $status (attempt $attempt of 3)."
+          [ "$attempt" -lt 3 ] && sleep $((attempt * 10))
+        done
+        cat "$response"
+        echo
+        echo "::error::DevHub did not answer successfully after 3 attempts."
+        exit 1
