@@ -23,7 +23,7 @@ There is no secret. Each job requests a GitHub Actions OIDC token for the
 audience `devhub` (`permissions: id-token: write`), and DevHub verifies it.
 DevHub only accepts tokens from `n8n-io` repositories and takes the repository
 and the run from the token, so a repository can only act on its own pull
-requests. DevHub can also limit callers to this workflow.
+requests. DevHub only accepts calls from this workflow, at any pinned commit.
 
 ## Usage
 
