@@ -18,6 +18,7 @@ on:
         options:
           - approve-and-set-automerge
           - cla-check
+          - ownership-checks
           - scan-community-package
       bump:
         description: 'Version bump (first release of an action is always v1.0.0)'

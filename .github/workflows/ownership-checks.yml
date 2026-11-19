@@ -1,0 +1,159 @@
+name: Ownership checks
+
+# Calls DevHub, which reads the repository's OWNERS file and does all the work:
+#   - required reviews: writes the `Required Reviews` commit status. A ruleset
+#     that requires this status from DevHub's GitHub App gates merging on it.
+#   - ownership comment: posts or updates the PR review overview comment.
+# DevHub authenticates this workflow with its GitHub Actions OIDC token and
+# takes the repository and run from the token, so the caller passes no secret.
+#
+# The caller chooses the triggers. Each job only runs for the events that can
+# change its result; see ownership-checks/README.md for the caller workflow.
+
+on:
+  workflow_call:
+    inputs:
+      required-reviews:
+        description: 'Write the Required Reviews commit status'
+        type: boolean
+        default: true
+      ownership-comment:
+        description: 'Post or update the PR review overview comment'
+        type: boolean
+        default: true
+      pull-request-number:
+        description: 'Pull request to evaluate on workflow_dispatch runs'
+        type: string
+        default: ''
+      devhub-url:
+        description: 'DevHub base URL; defaults to the DEVHUB_URL variable'
+        type: string
+        default: ''
+
+permissions: {}
+
+jobs:
+  required-reviews:
+    name: Required reviews
+    # Of the edited events only a base change matters; of the label events
+    # only large-scale-change. Review events split by head: same-repository
+    # heads arrive as pull_request_review, fork heads as the workflow_run of a
+    # workflow that runs on their reviews, because a fork's review event gets
+    # no id-token.
+    if: >-
+      inputs.required-reviews &&
+      contains(fromJSON('["pull_request_target", "pull_request_review", "workflow_run", "workflow_dispatch"]'), github.event_name) &&
+      (github.event_name != 'pull_request_target' ||
+       github.event.action != 'edited' || github.event.changes.base) &&
+      (github.event_name != 'pull_request_target' ||
+       (github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
+       github.event.label.name == 'large-scale-change') &&
+      (github.event_name != 'pull_request_review' ||
+       (github.event.pull_request.head.repo.full_name == github.repository &&
+        github.event.review.state != 'commented')) &&
+      (github.event_name != 'workflow_run' ||
+       (github.event.workflow_run.event == 'pull_request_review' &&
+        github.event.workflow_run.head_repository.full_name != github.repository))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # DevHub also evaluates one head at a time, because cancelling this job
+    # does not stop an evaluation that has already started there.
+    concurrency:
+      group: >-
+        ownership-checks-required-reviews-${{ github.event.pull_request.head.sha
+          || github.event.workflow_run.head_sha
+          || inputs.pull-request-number
+          || github.run_id }}
+      cancel-in-progress: true
+    permissions:
+      id-token: write
+      pull-requests: read
+    steps:
+      - name: Resolve the pull request
+        id: pr
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_NUMBER: ${{ github.event.pull_request.number }}
+          EVENT_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          RUN_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          RUN_HEAD_OWNER: ${{ github.event.workflow_run.head_repository.owner.login }}
+          INPUT_NUMBER: ${{ inputs.pull-request-number }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            workflow_run)
+              # The run carries no PR: find the open PR whose head is the run's head.
+              number="$(gh api "repos/${GITHUB_REPOSITORY}/pulls?state=open&head=${RUN_HEAD_OWNER}:${RUN_HEAD_BRANCH}" \
+                --jq "map(select(.head.sha == \"${RUN_HEAD_SHA}\"))[0].number // empty")"
+              sha="$RUN_HEAD_SHA"
+              ;;
+            workflow_dispatch)
+              number="$INPUT_NUMBER"
+              if ! [[ "$number" =~ ^[0-9]+$ ]]; then
+                echo "::error::Pass pull-request-number on workflow_dispatch runs."
+                exit 1
+              fi
+              sha="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${number}" --jq .head.sha)"
+              ;;
+            *)
+              number="$EVENT_NUMBER"
+              sha="$EVENT_HEAD_SHA"
+              ;;
+          esac
+          if [ -z "$number" ]; then
+            echo "No open pull request for this head; nothing to evaluate."
+          fi
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          echo "body=$(jq -cn --argjson number "${number:-0}" --arg sha "$sha" '{pullRequestNumber: $number, headSha: $sha}')" >> "$GITHUB_OUTPUT"
+
+      - name: Evaluate required reviews in DevHub
+        if: steps.pr.outputs.number != ''
+        uses: $/ownership-checks/actions/call-devhub
+        with:
+          devhub-url: ${{ inputs.devhub-url || vars.DEVHUB_URL }}
+          path: /api/v1/ci/required-reviews
+          body: ${{ steps.pr.outputs.body }}
+
+  merge-queue:
+    name: Pass required reviews in the merge queue
+    # GitHub only queues a PR whose Required Reviews status passed, and the
+    # queue does not change approvals, so the queue commit passes as well.
+    if: inputs.required-reviews && github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      id-token: write
+    steps:
+      - name: Pass the merge queue commit in DevHub
+        uses: $/ownership-checks/actions/call-devhub
+        with:
+          devhub-url: ${{ inputs.devhub-url || vars.DEVHUB_URL }}
+          path: /api/v1/ci/required-reviews/merge-group
+
+  ownership-comment:
+    name: Ownership comment
+    # Bot-authored PRs are skipped as noise. A fork PR's pull_request run gets
+    # no id-token; callers that use pull_request_target also cover forks.
+    if: >-
+      inputs.ownership-comment &&
+      contains(fromJSON('["pull_request", "pull_request_target"]'), github.event_name) &&
+      contains(fromJSON('["opened", "synchronize", "reopened"]'), github.event.action) &&
+      github.event.pull_request.user.type != 'Bot' &&
+      (github.event_name == 'pull_request_target' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: ownership-checks-comment-${{ github.event.pull_request.number }}
+      cancel-in-progress: true
+    permissions:
+      id-token: write
+    steps:
+      - name: Update the ownership comment in DevHub
+        uses: $/ownership-checks/actions/call-devhub
+        with:
+          devhub-url: ${{ inputs.devhub-url || vars.DEVHUB_URL }}
+          path: /api/v1/ci/ownership-comment
+          body: '{"pullRequestNumber": ${{ github.event.pull_request.number }}}'

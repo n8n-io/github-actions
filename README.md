@@ -7,6 +7,7 @@ Shared GitHub Actions and reusable workflows used across `n8n-io` repositories.
 | [`cla-check`](./cla-check) | Verify every contributor on a PR has signed the n8n CLA |
 | [`approve-and-set-automerge`](./approve-and-set-automerge) | Approve a PR as a GitHub App and optionally enable squash automerge |
 | [`scan-community-package`](./scan-community-package) | Reusable workflow: scan a published npm package or the calling repository for insecure code, misconfiguration and secrets |
+| [`ownership-checks`](./ownership-checks) | Reusable workflow: run the `OWNERS` checks in DevHub — the `Required Reviews` status and the PR ownership comment |
 
 ## Consuming an action or workflow
 
