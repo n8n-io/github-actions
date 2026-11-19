@@ -23,7 +23,10 @@ There is no secret. Each job requests a GitHub Actions OIDC token for the
 audience `devhub` (`permissions: id-token: write`), and DevHub verifies it.
 DevHub only accepts tokens from `n8n-io` repositories and takes the repository
 and the run from the token, so a repository can only act on its own pull
-requests. DevHub only accepts calls from this workflow, at any pinned commit.
+requests. DevHub (n8n-io/developer-platform-hub#6) only accepts calls from
+this workflow. It accepts any commit of it, so a repository that pins an older
+version keeps working, and a fix here reaches a repository when it updates its
+pin.
 
 ## Usage
 
@@ -103,7 +106,9 @@ dispatch the workflow with its number.
 
 DevHub writes the statuses and the comment, so a status from another app or a
 failed run does not replace its verdict. If DevHub cannot be reached, the run
-fails and the status stays as it was; dispatch the workflow again later.
+fails and the status stays as it was. A pull request that has no status yet
+stays blocked wherever a ruleset requires it. Dispatch the workflow again with
+the pull request number once DevHub is back.
 
 ## Inputs
 

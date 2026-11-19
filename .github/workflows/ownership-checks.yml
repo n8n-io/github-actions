@@ -85,7 +85,8 @@ jobs:
           case "$EVENT_NAME" in
             workflow_run)
               # The run carries no PR: find the open PR whose head is the run's head.
-              number="$(gh api "repos/${GITHUB_REPOSITORY}/pulls?state=open&head=${RUN_HEAD_OWNER}:${RUN_HEAD_BRANCH}" \
+              # -f fields on a GET are sent as encoded query parameters, so any branch name works.
+              number="$(gh api -X GET "repos/${GITHUB_REPOSITORY}/pulls" -f state=open -f "head=${RUN_HEAD_OWNER}:${RUN_HEAD_BRANCH}" \
                 --jq "map(select(.head.sha == \"${RUN_HEAD_SHA}\"))[0].number // empty")"
               sha="$RUN_HEAD_SHA"
               ;;
@@ -114,6 +115,8 @@ jobs:
         with:
           devhub-url: ${{ inputs.devhub-url || vars.DEVHUB_URL }}
           path: /api/v1/ci/required-reviews
+          # DevHub can wait up to 3 minutes for an earlier evaluation of the same commit.
+          max-time: '240'
           body: ${{ steps.pr.outputs.body }}
 
   merge-queue:
