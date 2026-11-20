@@ -1,0 +1,25 @@
+name: Evaluate required reviews
+description: Evaluate OWNERS from GitHub and publish a commit status, optionally using DevHub's ownership cache
+inputs:
+  token:
+    description: GitHub App installation token with contents, pull requests and organization members read, and statuses write
+    required: true
+  pull-request-number:
+    description: Pull request to evaluate; unused for merge groups
+    required: false
+  event-head-sha:
+    description: PR head seen by the dispatcher, used to clear old success before evaluation
+    required: false
+  devhub-url:
+    description: Optional DevHub base URL
+    required: false
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        OWNERSHIP_TOKEN: ${{ inputs.token }}
+        PR_NUMBER: ${{ inputs.pull-request-number }}
+        EVENT_HEAD_SHA: ${{ inputs.event-head-sha }}
+        DEVHUB_URL: ${{ inputs.devhub-url }}
+      run: node "$GITHUB_ACTION_PATH/run.mjs"
