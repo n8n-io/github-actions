@@ -20,6 +20,9 @@ on:
         type: string
         default: ''
     secrets:
+      required-reviews-app-id:
+        description: 'ID of the GitHub App trusted to publish Required Reviews'
+        required: false
       required-reviews-app-key:
         description: 'Private key for the GitHub App trusted to publish Required Reviews'
         required: false
@@ -110,11 +113,11 @@ jobs:
     steps:
       - name: Check Required Reviews credentials
         env:
-          APP_ID: ${{ vars.REQUIRED_REVIEWS_APP_ID }}
+          APP_ID: ${{ secrets.required-reviews-app-id }}
           APP_KEY: ${{ secrets.required-reviews-app-key }}
         run: |
           if [[ -z "$APP_ID" || -z "$APP_KEY" ]]; then
-            echo '::error::Set REQUIRED_REVIEWS_APP_ID and pass required-reviews-app-key. The ruleset must trust this App for Required Reviews.'
+            echo '::error::Pass required-reviews-app-id and required-reviews-app-key. The ruleset must trust this App for Required Reviews.'
             exit 1
           fi
 
@@ -122,7 +125,7 @@ jobs:
         id: app-token
         uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
         with:
-          app-id: ${{ vars.REQUIRED_REVIEWS_APP_ID }}
+          app-id: ${{ secrets.required-reviews-app-id }}
           private-key: ${{ secrets.required-reviews-app-key }}
           permission-contents: read
           permission-pull-requests: read

@@ -33,9 +33,9 @@ pin.
 
 Required reviews need a GitHub App installed on the calling repository. Grant
 **Contents: read**, **Pull requests: read**, **Members: read**
-at the organization level, and **Commit statuses: write**. Set the repo or org
-variable `REQUIRED_REVIEWS_APP_ID` and pass the private key as
-`required-reviews-app-key`. Limit access to the private key to participating
+at the organization level, and **Commit statuses: write**. Pass the Actions
+secrets `N8N_DEVHUB_APP_ID` and `N8N_DEVHUB_PRIVATE_KEY` as
+`required-reviews-app-id` and `required-reviews-app-key`. Limit access to the private key to participating
 repositories. The workflow uses a short-lived installation token scoped to the
 calling repository. Never use a PR checkout in this workflow.
 
@@ -72,7 +72,8 @@ jobs:
     with:
       pull-request-number: ${{ inputs.pr_number }}
     secrets:
-      required-reviews-app-key: ${{ secrets.REQUIRED_REVIEWS_APP_KEY }}
+      required-reviews-app-id: ${{ secrets.N8N_DEVHUB_APP_ID }}
+      required-reviews-app-key: ${{ secrets.N8N_DEVHUB_PRIVATE_KEY }}
 ```
 
 `pull_request_target` is safe here: no job checks out or runs code from the pull
@@ -100,7 +101,7 @@ dispatch the workflow with its number.
    configured App, not from any publisher. If the App is already the required
    publisher, the ruleset can stay unchanged. Prefer a dedicated App over
    distributing an existing App's broader private key.
-2. Update the pin and pass the App secret in the monorepo caller. If using a new
+2. Update the pin and pass both App secrets in the monorepo caller. If using a new
    App, coordinate the ruleset update in the same cutover; otherwise GitHub
    ignores the new publisher's status. Let old runs finish and re-evaluate open
    PRs. If the publisher changes, let the queue drain or requeue entries so
@@ -137,4 +138,5 @@ against GitHub still does not produce a pass.
 ## Permissions
 
 The calling job must grant `id-token: write` and `pull-requests: read`. When
-`required-reviews` is enabled, pass the App private key via `required-reviews-app-key`.
+`required-reviews` is enabled, pass the App ID and private key via
+`required-reviews-app-id` and `required-reviews-app-key`.
