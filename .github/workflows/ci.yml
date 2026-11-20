@@ -26,6 +26,8 @@ jobs:
 
       - run: pnpm typecheck
 
+      - run: pnpm test:ownership-checks
+
       - name: Release dropdown covers every package
         run: |
           # Every package, action or reusable workflow, is a top-level directory with a README.
