@@ -8,6 +8,6 @@
 		"strict": true,
 		"moduleResolution": "bundler"
 	},
-	"include": ["*/scripts/**/*.mjs"],
+	"include": ["*/scripts/**/*.mjs", "ownership-checks/actions/**/*.mjs", "ownership-checks/lib/test/*.mjs"],
 	"exclude": ["node_modules"]
 }

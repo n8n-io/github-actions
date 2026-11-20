@@ -1,0 +1,21 @@
+{
+  "name": "@n8n/ownership-checks",
+  "version": "1.0.0",
+  "private": true,
+  "description": "OWNERS parsing and the Required Reviews evaluation, shared by DevHub and the ownership-checks actions",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": {
+      "types": "./types/index.d.mts",
+      "default": "./index.mjs"
+    }
+  },
+  "files": [
+    "*.mjs",
+    "types"
+  ]
+}

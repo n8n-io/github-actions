@@ -20,6 +20,34 @@ skipped.
 |------|------|
 | [`.github/workflows/ownership-checks.yml`](../.github/workflows/ownership-checks.yml) | The reusable workflow. One job, with a step per check |
 | [`actions/call-devhub`](./actions/call-devhub) | Gets a GitHub Actions OIDC token and calls a DevHub CI API, with retries |
+| [`actions/evaluate-required-reviews`](./actions/evaluate-required-reviews) | Evaluates required reviews in the job itself, without DevHub. Not used by the workflow yet |
+| [`lib`](./lib) | `@n8n/ownership-checks`: the OWNERS parser and the required-reviews evaluation. DevHub and `evaluate-required-reviews` both use it |
+
+## Shared library
+
+`lib` holds the one implementation of the `OWNERS` rules: the parser, file
+matching, the `required(k)` and `involved(k)` counts, the exemptions, and the
+`Required Reviews` evaluation. DevHub and the `evaluate-required-reviews`
+action import the same code, so a pull request gets the same verdict from both.
+
+- It is plain ESM JavaScript with JSDoc types and has no dependencies. It needs
+  Node 20 or later.
+- `enforceRequiredReviews()` takes two optional adapters. `cache` stores values
+  under keys that never change meaning. `lock` makes sure that only one
+  evaluation of a commit runs at a time. DevHub gives it a PostgreSQL cache and
+  an advisory lock. The action gives it neither: the caller's `concurrency`
+  group stops a second run of the same pull request.
+- `types/` holds the declarations for TypeScript users. They are generated:
+  run `pnpm types` after a change to `lib/*.mjs` and commit the result. CI fails
+  when they are out of date.
+- DevHub installs the lib as a Git dependency pinned to a commit of this
+  repository:
+
+  ```json
+  "@n8n/ownership-checks": "github:n8n-io/github-actions#<sha>&path:/ownership-checks/lib"
+  ```
+
+Run `pnpm test` for the lib's tests.
 
 ## Authentication
 

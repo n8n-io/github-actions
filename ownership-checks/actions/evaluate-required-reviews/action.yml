@@ -1,0 +1,27 @@
+name: Evaluate required reviews
+description: >-
+  Evaluate the `required` and `involved` OWNERS entries in the job itself, without DevHub, and write the
+  `Required Reviews` commit status. On merge_group runs, pass the queue commit.
+
+inputs:
+  github-token:
+    description: >-
+      A token of the GitHub App that the ruleset requires the status from. It must read contents, pull
+      requests and organization members, and write commit statuses.
+    required: true
+  pull-request-number:
+    description: 'Pull request to evaluate. Not used on merge_group runs'
+    required: false
+    default: ''
+  head-sha:
+    description: 'Head commit of the pull request. Not used on merge_group runs'
+    required: false
+    default: ''
+
+outputs:
+  state:
+    description: 'The status that was written: success or pending'
+
+runs:
+  using: node24
+  main: main.mjs
