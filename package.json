@@ -3,7 +3,8 @@
   "private": true,
   "description": "Shared GitHub Actions for n8n-io repositories",
   "scripts": {
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:ownership-checks": "node --test ownership-checks/actions/required-reviews/*.test.mjs"
   },
   "devDependencies": {
     "@actions/core": "1.11.1",

@@ -1,29 +1,25 @@
 # ownership-checks
 
-Reusable workflow that runs the `OWNERS` checks in DevHub. DevHub reads the
-repository's `OWNERS` file from its default branch and does all the work; this
-workflow only tells DevHub which pull request to look at.
-
-| Check | What DevHub does |
-|-------|------------------|
-| Required reviews | Writes the `Required Reviews` commit status: a member of each team with a `required` entry for a changed file must approve |
-| Merge queue | Passes `Required Reviews` on merge queue commits |
-| Ownership comment | Posts or updates the PR review overview comment: owning teams, changed lines, and required teams |
-
-All checks run as steps of one job, `Ownership checks`. A pull request shows one
-check per event type, and only events that need no check at all show it as
-skipped.
+Reusable workflow that enforces `OWNERS` and optionally posts an ownership comment.
+The workflow publishes `Required Reviews` directly. The `required(k)` rule needs
+`k` approvals from team members other than the author. For `involved(k)`, an
+author who's an active team member counts as one of the `k` reviewers. Counts are
+1–5 and default to 1. The action reads `OWNERS` from the default branch, keeps reviews
+and memberships live, and evaluates PRs one run at a time per PR. The verdict
+uses only GitHub. The optional ownership comment is best effort and runs in a
+separate job that calls DevHub.
 
 ## Layout
 
 | Path | Role |
 |------|------|
-| [`.github/workflows/ownership-checks.yml`](../.github/workflows/ownership-checks.yml) | The reusable workflow. One job, with a step per check |
+| [`.github/workflows/ownership-checks.yml`](../.github/workflows/ownership-checks.yml) | Dispatches evaluations and optional comments |
 | [`actions/call-devhub`](./actions/call-devhub) | Gets a GitHub Actions OIDC token and calls a DevHub CI API, with retries |
+| [`actions/required-reviews`](./actions/required-reviews) | Evaluates required reviews and publishes the status using the configured GitHub App |
 
 ## Authentication
 
-There is no secret. The job requests a GitHub Actions OIDC token for the
+DevHub calls use no shared secret. The job requests a GitHub Actions OIDC token for the
 audience `devhub` (`permissions: id-token: write`), and DevHub verifies it.
 DevHub only accepts tokens from `n8n-io` repositories and takes the repository
 and the run from the token, so a repository can only act on its own pull
@@ -32,9 +28,19 @@ this workflow. It accepts any commit of it, so a repository that pins an older
 version keeps working, and a fix here reaches a repository when it updates its
 pin.
 
+Required reviews need a GitHub App installed on the calling repository. Grant
+repository permissions **Contents: read**, **Pull requests: read**, and
+**Commit statuses: write**, plus the organization permission **Members: read**.
+Pass the credentials for the App trusted by the ruleset as
+`required-reviews-app-id` and `required-reviews-app-key`. Limit access to the
+private key to participating repositories. The workflow uses a short-lived
+installation token scoped to the calling repository. Never use a PR checkout in
+this workflow.
+
 ## Usage
 
-Add a workflow like this to the repository and replace the pinned SHA. The
+Add a workflow like this to the repository and replace the pinned SHA and
+version comment with the release you are using. The
 triggers decide which checks can run; each step ignores the events that cannot
 change its result.
 
@@ -58,12 +64,15 @@ permissions: {}
 
 jobs:
   ownership:
-    uses: n8n-io/github-actions/.github/workflows/ownership-checks.yml@<sha> # ownership-checks/v1.0.0
+    uses: n8n-io/github-actions/.github/workflows/ownership-checks.yml@<sha> # ownership-checks/v2.0.0
     permissions:
       id-token: write
       pull-requests: read
     with:
       pull-request-number: ${{ inputs.pr_number }}
+    secrets:
+      required-reviews-app-id: ${{ secrets.REQUIRED_REVIEWS_APP_ID }}
+      required-reviews-app-key: ${{ secrets.REQUIRED_REVIEWS_APP_PRIVATE_KEY }}
 ```
 
 `pull_request_target` is safe here: no job checks out or runs code from the pull
@@ -83,36 +92,38 @@ The job looks up the open pull request whose head is that run's head:
 To evaluate a pull request again, for example after a team membership change,
 dispatch the workflow with its number.
 
-## Opting in and out
+## Rolling out the action as publisher
 
-- **Calling DevHub.** A repository opts in by adding the caller workflow, and
-  opts out of a single check with an input:
+1. Release the new workflow. Before changing the monorepo pin, install and
+   configure the App and exercise PR and merge queue publication on a test
+   ruleset. The production ruleset must require `Required Reviews` from the
+   configured App, not from any publisher. If the App is already the required
+   publisher, the ruleset can stay unchanged. Prefer a dedicated App over
+   distributing an existing App's broader private key.
+2. Update the pin and pass both App secrets in the monorepo caller. To retain
+   the existing DevHub App as publisher, map `N8N_DEVHUB_APP_ID` and
+   `N8N_DEVHUB_PRIVATE_KEY`. If using a new
+   App, coordinate the ruleset update in the same cutover; otherwise GitHub
+   ignores the new publisher's status. Let old runs finish and re-evaluate open
+   PRs. If the publisher changes, let the queue drain or requeue entries so
+   their commits get a status from the new publisher. There may be a short
+   merge pause while statuses are repopulated.
 
-  ```yaml
-      with:
-        ownership-comment: false
-  ```
-
-- **Blocking merges.** The `Required Reviews` status only blocks merging when a
-  ruleset requires it from DevHub's GitHub App. Keep the ruleset and the caller
-  workflow in step: a ruleset that requires the status in a repository that
-  does not call DevHub blocks every pull request.
+To roll back, restore the previous pin and, if it changed, the original
+publisher in the ruleset. Re-evaluate the affected PRs.
 
 ## Requirements
 
 - An `OWNERS` file at the root of the default branch. Each line is a pattern
-  (`*`, a directory such as `packages/cli/`, or an exact path), one
+  (`*`, a repo-relative directory such as `packages/cli/`, or an exact
+  repo-relative path), one
   `@n8n-io/<team>` handle, and optionally `required`. A repository without an
   `OWNERS` file gets an `error` status.
-- DevHub's GitHub App installed on the repository.
-- The `DEVHUB_URL` variable, set for the organization or the repository, or the
-  `devhub-url` input.
+- `DEVHUB_URL` (or `devhub-url`) is only used for the ownership comment. Without
+  it, the comment job is skipped.
 
-DevHub writes the statuses and the comment, so a status from another app or a
-failed run does not replace its verdict. If DevHub cannot be reached, the run
-fails and the status stays as it was. A pull request that has no status yet
-stays blocked wherever a ruleset requires it. Dispatch the workflow again with
-the pull request number once DevHub is back.
+A DevHub outage does not affect the verdict. Failure to verify approvals
+against GitHub still does not produce a pass.
 
 ## Inputs
 
@@ -121,9 +132,11 @@ the pull request number once DevHub is back.
 | `required-reviews` | no | Write the `Required Reviews` status and pass merge queue commits. Defaults to `true` |
 | `ownership-comment` | no | Post or update the PR review overview comment. Defaults to `true` |
 | `pull-request-number` | on `workflow_dispatch` | Pull request to evaluate |
-| `devhub-url` | no | DevHub base URL. Defaults to the `DEVHUB_URL` variable |
+| `devhub-url` | no | DevHub base URL for the ownership comment. Defaults to the `DEVHUB_URL` variable |
 
 ## Permissions
 
-The calling job must grant `id-token: write` and `pull-requests: read`. The
-workflow uses no secrets.
+Grant `pull-requests: read` and `id-token: write` in the caller as shown above.
+Only the ownership comment job uses `id-token: write`. When
+`required-reviews` is enabled, pass the App ID and private key via
+`required-reviews-app-id` and `required-reviews-app-key`.
