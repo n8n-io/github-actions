@@ -1,0 +1,16 @@
+ownership-checks/actions/required-reviews/evaluate.mjs
+  h_52a137d26d774c 39,63-65
+ownership-checks/actions/required-reviews/required-reviews.test.mjs
+  h_52a137d26d774c 98-106
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "12589aff118c165183378413f1e752458b9a3859",
+  "prompts": {},
+  "humans": {
+    "h_52a137d26d774c": {
+      "author": "Matsuuu <matias.huhta@n8n.io>"
+    }
+  }
+}
