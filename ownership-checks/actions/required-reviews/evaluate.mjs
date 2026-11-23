@@ -1,7 +1,6 @@
 import { collectApprovers, missingApprovals, resolveRequiredTeams } from './policy.mjs';
 
 const shaPattern = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
-const requiredTeamsShape = /^@[\w.-]+\/[\w.-]+$/;
 const baseHead = pr => ({ baseSha: pr.base.sha, headSha: pr.head.sha });
 
 export function createGitHubClient(token, fetcher = fetch) {
@@ -33,20 +32,7 @@ export function createGitHubClient(token, fetcher = fetch) {
   return { request, pages };
 }
 
-export function isMatchingSnapshot(value, repository, snapshot) {
-  const record = input => input && typeof input === 'object' && !Array.isArray(input);
-  const count = input => Number.isInteger(input) && input >= 0 && input <= 5;
-  return value?.policyVersion === 2 && value.repository === repository && Object.entries(snapshot).every(([key, expected]) => value[key] === expected) &&
-    shaPattern.test(value.ownersSha) && record(value.requiredTeams) && record(value.teamRules) &&
-    Object.keys(value.teamRules).length === Object.keys(value.requiredTeams).length &&
-    Object.entries(value.requiredTeams).every(([team, paths]) => {
-      const rule = value.teamRules[team];
-      return requiredTeamsShape.test(team) && Array.isArray(paths) && paths.length > 0 && paths.every(path => typeof path === 'string' && path.length > 0) &&
-        rule && count(rule.approvals) && count(rule.involved) && (rule.approvals > 0 || rule.involved > 0);
-    });
-}
-
-export async function runRequiredReviews({ github, repository, eventName, sha, pullRequestNumber, eventHeadSha, runUrl, readCache, log = console.log }) {
+export async function runRequiredReviews({ github, repository, eventName, sha, pullRequestNumber, eventHeadSha, runUrl }) {
   repository = repository.toLowerCase();
   if (!/^n8n-io\/(?!\.{1,2}$)[a-z0-9._-]+$/.test(repository)) throw new Error('Expected an n8n-io repository');
   const root = `/repos/${repository}`;
@@ -109,30 +95,15 @@ export async function runRequiredReviews({ github, repository, eventName, sha, p
       const ref = await github.request(`${root}/git/ref/heads/${encodeURIComponent(defaultBranch)}`);
       const defaultBranchSha = ref.object.sha;
       if (!shaPattern.test(defaultBranchSha)) throw new Error('Invalid default-branch SHA');
-      const snapshot = { pullRequestNumber, baseSha, headSha, defaultBranchSha };
-      let rules;
-      if (readCache) {
-        try {
-          const result = await readCache(snapshot);
-          if (isMatchingSnapshot(result, repository, snapshot)) rules = result.teamRules;
-        } catch {
-          // The cache is optional; GitHub remains the source of truth.
-        }
-      }
-      if (rules) {
-        log('Ownership snapshot: DevHub cache hit');
-      } else {
-        log('Ownership snapshot: reading from GitHub');
-        const [owners, files] = await Promise.all([
-          github.request(`${root}/contents/OWNERS?ref=${defaultBranchSha}`),
-          github.pages(`${prPath}/files`, 3_000),
-        ]);
-        if (owners.type !== 'file' || owners.encoding !== 'base64' || !shaPattern.test(owners.sha) || typeof owners.content !== 'string') {
-          throw new Error('GitHub did not return an OWNERS file');
-        }
-        ({ rules } = resolveRequiredTeams(files, Buffer.from(owners.content, 'base64').toString('utf8')));
+      const [owners, files] = await Promise.all([
+        github.request(`${root}/contents/OWNERS?ref=${defaultBranchSha}`),
+        github.pages(`${prPath}/files`, 3_000),
+      ]);
+      if (owners.type !== 'file' || owners.encoding !== 'base64' || !shaPattern.test(owners.sha) || typeof owners.content !== 'string') {
+        throw new Error('GitHub did not return an OWNERS file');
       }
 
+      const { rules } = resolveRequiredTeams(files, Buffer.from(owners.content, 'base64').toString('utf8'));
       const teams = Object.entries(rules);
       if (!teams.length) return ['success', 'No team approval is required for these changes'];
       const approvers = collectApprovers(await github.pages(`${prPath}/reviews`));

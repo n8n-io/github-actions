@@ -1,5 +1,4 @@
 import { createGitHubClient, runRequiredReviews } from './evaluate.mjs';
-import { ownershipSnapshotReader } from './devhub.mjs';
 
 const env = process.env;
 
@@ -13,7 +12,6 @@ try {
     pullRequestNumber: Number(env.PR_NUMBER),
     eventHeadSha: env.EVENT_HEAD_SHA,
     runUrl: `${env.GITHUB_SERVER_URL}/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}`,
-    readCache: ownershipSnapshotReader(env),
   });
 } catch (error) {
   console.error(error instanceof Error ? error.message : 'Required reviews failed');

@@ -5,12 +5,9 @@ The workflow publishes `Required Reviews` directly. The `required(k)` rule needs
 `k` approvals from team members other than the author. For `involved(k)`, an
 author who's an active team member counts as one of the `k` reviewers. Counts are
 1–5 and default to 1. The action reads `OWNERS` from the default branch, keeps reviews
-and memberships live, and evaluates PRs one run at a time per PR. A matching
-DevHub snapshot saves reads of `OWNERS` and the changed file list; if DevHub is
-unavailable, predates the snapshot endpoint, or doesn't have a matching answer
-within two seconds, the action reads directly from GitHub. The ownership comment is best effort
-and runs separately from the verdict. Merge queue runs publish without calling
-the cache.
+and memberships live, and evaluates PRs one run at a time per PR. The verdict
+uses only GitHub. The optional ownership comment is best effort and runs in a
+separate job that calls DevHub.
 
 ## Layout
 
@@ -107,9 +104,6 @@ dispatch the workflow with its number.
    PRs. If the publisher changes, let the queue drain or requeue entries so
    their commits get a status from the new publisher. There may be a short
    merge pause while statuses are repopulated.
-3. Deploy DevHub's snapshot endpoint after the pin update. Until then, a missing
-   endpoint just means more GitHub reads; the action still publishes the same
-   verdict. The existing ownership comment endpoint works throughout.
 
 To roll back, restore the previous pin and, if it changed, the original
 publisher in the ruleset. Re-evaluate the affected PRs.
@@ -120,8 +114,8 @@ publisher in the ruleset. Re-evaluate the affected PRs.
   (`*`, a directory such as `packages/cli/`, or an exact path), one
   `@n8n-io/<team>` handle, and optionally `required`. A repository without an
   `OWNERS` file gets an `error` status.
-- `DEVHUB_URL` (or `devhub-url`) is optional. Without it, the action reads
-  ownership directly from GitHub and skips the comment.
+- `DEVHUB_URL` (or `devhub-url`) is only used for the ownership comment. Without
+  it, the comment job is skipped.
 
 A DevHub outage does not affect the verdict. Failure to verify approvals
 against GitHub still does not produce a pass.
@@ -133,10 +127,11 @@ against GitHub still does not produce a pass.
 | `required-reviews` | no | Write the `Required Reviews` status and pass merge queue commits. Defaults to `true` |
 | `ownership-comment` | no | Post or update the PR review overview comment. Defaults to `true` |
 | `pull-request-number` | on `workflow_dispatch` | Pull request to evaluate |
-| `devhub-url` | no | DevHub base URL. Defaults to the `DEVHUB_URL` variable |
+| `devhub-url` | no | DevHub base URL for the ownership comment. Defaults to the `DEVHUB_URL` variable |
 
 ## Permissions
 
-The calling job must grant `id-token: write` and `pull-requests: read`. When
+Grant `pull-requests: read` and `id-token: write` in the caller as shown above.
+Only the ownership comment job uses `id-token: write`. When
 `required-reviews` is enabled, pass the App ID and private key via
 `required-reviews-app-id` and `required-reviews-app-key`.

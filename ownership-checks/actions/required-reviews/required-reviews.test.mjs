@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ownershipSnapshotReader } from './devhub.mjs';
 import { createGitHubClient, runRequiredReviews } from './evaluate.mjs';
 import { resolveRequiredTeams } from './policy.mjs';
 
@@ -9,13 +8,7 @@ const head = 'a'.repeat(40);
 const base = 'b'.repeat(40);
 const defaultBranch = 'c'.repeat(40);
 const ownersSha = 'd'.repeat(40);
-const cachedOwnership = snapshot => ({
-  ...snapshot, policyVersion: 2, repository, ownersSha,
-  requiredTeams: { '@n8n-io/platform': ['src/service.ts'] },
-  teamRules: { '@n8n-io/platform': { approvals: 1, involved: 0 } },
-});
-
-function fixture() {
+function fixture({ onFiles = () => {} } = {}) {
   const statuses = [];
   const calls = [];
   const repo = { full_name: repository, default_branch: 'master' };
@@ -23,13 +16,13 @@ function fixture() {
   const review = { user: { login: 'alice' }, state: 'APPROVED' };
   const membership = { state: 'active' };
   const files = [{ filename: 'src/service.ts' }];
+  const owners = { text: '* @n8n-io/platform required' };
   const options = {
     repository,
     pullRequestNumber: 7,
     eventHeadSha: head,
     eventName: 'pull_request_review',
     runUrl: `https://github.com/${repository}/actions/runs/1`,
-    log: () => {},
     github: createGitHubClient('test-token', async (url, init) => {
       const path = new URL(url).pathname;
       calls.push(path);
@@ -41,74 +34,39 @@ function fixture() {
       if (path.endsWith('/ref/heads/master')) return Response.json({ object: { sha: defaultBranch } });
       if (path.endsWith('/contents/OWNERS')) {
         assert.equal(new URL(url).searchParams.get('ref'), defaultBranch);
-        return Response.json({ type: 'file', encoding: 'base64', sha: ownersSha, content: Buffer.from('* @n8n-io/platform required').toString('base64') });
+        return Response.json({ type: 'file', encoding: 'base64', sha: ownersSha, content: Buffer.from(owners.text).toString('base64') });
       }
-      if (path.endsWith('/files')) return Response.json(files);
+      if (path.endsWith('/files')) {
+        onFiles(pr);
+        return Response.json(files);
+      }
       if (path.endsWith('/reviews')) return Response.json([review]);
       if (path.endsWith('/memberships/alice')) return Response.json(membership);
       assert.fail(`Unexpected request: ${path}`);
     }),
   };
-  return { options, statuses, calls, review, membership, files, pr };
+  return { options, statuses, calls, review, membership, owners, pr };
 }
 
-test('DevHub outage, miss, or mismatch all fall back to GitHub without weakening the verdict', async () => {
-  for (const readCache of [
-    async () => { throw new Error('DevHub down'); },
-    async () => null,
-    async snapshot => ({ ...cachedOwnership(snapshot), headSha: base }),
-    async snapshot => ({ ...cachedOwnership(snapshot), policyVersion: 1, requiredTeams: {}, teamRules: {} }),
-  ]) {
-    const { options, calls, statuses, review } = fixture();
-    assert.equal(await runRequiredReviews({ ...options, readCache }), 'success');
-    review.state = 'DISMISSED';
-    assert.equal(await runRequiredReviews({ ...options, readCache }), 'pending');
-    assert.deepEqual(statuses.map(status => status.state), ['pending', 'success', 'pending', 'pending']);
-    assert.ok(statuses.every(status => status.context === 'Required Reviews' && status.target_url === options.runUrl));
-    assert.equal(calls.filter(path => path.endsWith('/files')).length, 2);
-  }
-});
-
-test('a new pin works against older DevHub and starts using the cache after DevHub is upgraded', async () => {
-  const { options, calls, statuses } = fixture();
-  let deployed = false;
-  const readCache = ownershipSnapshotReader({
-    DEVHUB_URL: 'https://devhub.example.com',
-    ACTIONS_ID_TOKEN_REQUEST_URL: 'https://oidc.example.com/token',
-    ACTIONS_ID_TOKEN_REQUEST_TOKEN: 'actions-token',
-  }, async (url, init) => {
-    if (url.hostname === 'oidc.example.com') {
-      assert.equal(url.searchParams.get('audience'), 'devhub');
-      return Response.json({ value: 'devhub-token' });
-    }
-    assert.equal(url.href, 'https://devhub.example.com/api/v1/ci/ownership-snapshot');
-    assert.equal(init.headers.Authorization, 'Bearer devhub-token');
-    if (!deployed) return new Response(null, { status: 404 });
-    return Response.json(cachedOwnership(JSON.parse(init.body)));
-  });
-  assert.equal(await runRequiredReviews({ ...options, readCache }), 'success');
-  deployed = true;
-  assert.equal(await runRequiredReviews({ ...options, readCache }), 'success');
-  assert.equal(calls.filter(path => path.endsWith('/files')).length, 1);
-  assert.ok(statuses.every(status => status.context === 'Required Reviews'));
-});
-
-test('a matching cache hit skips file reads but never caches a review or team membership', async () => {
-  const { options, calls, membership, review } = fixture();
-  const readCache = async snapshot => cachedOwnership(snapshot);
-  assert.equal(await runRequiredReviews({ ...options, readCache }), 'success');
+test('each verdict uses GitHub for ownership, reviews, and team membership', async () => {
+  const { options, calls, membership, review, statuses } = fixture();
+  assert.equal(await runRequiredReviews(options), 'success');
   membership.state = 'pending';
-  assert.equal(await runRequiredReviews({ ...options, readCache }), 'pending');
+  assert.equal(await runRequiredReviews(options), 'pending');
+  membership.state = 'active';
   review.state = 'DISMISSED';
-  assert.equal(await runRequiredReviews({ ...options, readCache }), 'pending');
-  assert.ok(!calls.some(path => /\/(files|OWNERS)$/.test(path)));
-  assert.equal(calls.filter(path => path.endsWith('/reviews')).length, 3);
+  assert.equal(await runRequiredReviews(options), 'pending');
+  for (const endpoint of ['/files', '/OWNERS', '/reviews']) {
+    assert.equal(calls.filter(path => path.endsWith(endpoint)).length, 3);
+  }
   assert.equal(calls.filter(path => path.endsWith('/memberships/alice')).length, 2);
+  assert.deepEqual(statuses.map(status => status.state), ['pending', 'success', 'pending', 'pending', 'pending', 'pending']);
+  assert.ok(statuses.every(status => status.context === 'Required Reviews' && status.target_url === options.runUrl));
 });
 
 test('an upstream failure or a changed PR does not write success', async () => {
-  const { options, statuses, pr } = fixture();
-  await assert.rejects(runRequiredReviews({ ...options, readCache: async () => { pr.base.sha = head; return null; } }), /changed during/);
+  const { options, statuses } = fixture({ onFiles: pr => { pr.base.sha = head; } });
+  await assert.rejects(runRequiredReviews(options), /changed during/);
   assert.deepEqual(statuses.map(status => status.state), ['pending', 'error']);
 
   const unavailable = fixture();
@@ -118,9 +76,9 @@ test('an upstream failure or a changed PR does not write success', async () => {
   assert.deepEqual(unavailable.statuses.map(status => status.state), ['pending', 'error']);
 });
 
-test('merge queue uses the queue SHA and never calls DevHub or reads the PR', async () => {
+test('merge queue publishes to the queue SHA without reading the PR', async () => {
   const { options, calls, statuses } = fixture();
-  await runRequiredReviews({ ...options, eventName: 'merge_group', sha: base, readCache: () => assert.fail('unexpected cache lookup') });
+  await runRequiredReviews({ ...options, eventName: 'merge_group', sha: base });
   assert.deepEqual(calls, [`/repos/${repository}/statuses/${base}`]);
   assert.equal(statuses[0].state, 'success');
 });
@@ -136,7 +94,7 @@ test('a capped GitHub diff does not count as a complete list of changed paths', 
   await assert.rejects(github.pages('/files', 3_000), /reached 3000 entries/);
 });
 
-test('OWNERS fallback honors the winning rule, both sides of a rename, and test exclusions', () => {
+test('OWNERS honors the winning rule, both sides of a rename, and test exclusions', () => {
   const rules = '* @n8n-io/platform required\nlegacy/ @n8n-io/old required\ndocs/ @n8n-io/docs\n';
   const files = [{ filename: 'src/service.ts', previous_filename: 'legacy/service.ts' }, { filename: 'legacy/service.spec.ts' }, { filename: 'docs/page.md' }];
   assert.deepEqual(resolveRequiredTeams(files, rules).teams, {
@@ -147,18 +105,17 @@ test('OWNERS fallback honors the winning rule, both sides of a rename, and test 
 });
 
 test('required and involved counts apply together; the author only counts toward involved', async () => {
-  const { options, pr, statuses } = fixture();
+  const { options, owners, pr, statuses } = fixture();
   const request = options.github.request;
-  options.github.request = (path, init) => path.includes('/contents/OWNERS')
-    ? Promise.resolve({ type: 'file', encoding: 'base64', sha: ownersSha, content: Buffer.from('* @n8n-io/platform involved(2)').toString('base64') })
-    : path.endsWith('/memberships/author') ? Promise.resolve({ state: 'active' }) : request(path, init);
+  options.github.request = (path, init) => path.endsWith('/memberships/author') ? Promise.resolve({ state: 'active' }) : request(path, init);
+  owners.text = '* @n8n-io/platform involved(2)';
   pr.user = { login: 'author' };
   assert.equal(await runRequiredReviews(options), 'success');
-  const readCache = async (snapshot) => ({ ...cachedOwnership(snapshot), teamRules: { '@n8n-io/platform': { approvals: 3, involved: 2 } } });
-  assert.equal(await runRequiredReviews({ ...options, readCache }), 'pending');
+  owners.text = '* @n8n-io/platform involved(2)\nsrc/ @n8n-io/platform required(3)';
+  assert.equal(await runRequiredReviews(options), 'pending');
   assert.equal(statuses.at(-1).description, 'Waiting for approval from: 2 from platform');
   pr.user = { login: 'Alice' };
-  assert.equal(await runRequiredReviews({ ...options, readCache }), 'pending');
+  assert.equal(await runRequiredReviews(options), 'pending');
   assert.equal(statuses.at(-1).description, 'Waiting for approval from: 3 from platform');
   const rules = '* @n8n-io/platform required(2)\nlegacy/ @n8n-io/platform involved(3)';
   assert.deepEqual(resolveRequiredTeams([{ filename: 'src/service.ts', previous_filename: 'legacy/service.ts' }], rules).rules, {
