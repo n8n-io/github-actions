@@ -36,7 +36,7 @@ export async function runRequiredReviews({ github, repository, eventName, sha, p
   repository = repository.toLowerCase();
   if (!/^n8n-io\/(?!\.{1,2}$)[a-z0-9._-]+$/.test(repository)) throw new Error('Expected an n8n-io repository');
   const root = `/repos/${repository}`;
-  const status = (head, state, description) => {
+  const status = async (head, state, description) => {
     if (!shaPattern.test(head)) throw new Error('Invalid status SHA');
     return github.request(`${root}/statuses/${head}`, {
       payload: { context: 'Required Reviews', state, description: description.length > 140 ? `${description.slice(0, 139)}…` : description, target_url: runUrl },
@@ -58,9 +58,11 @@ export async function runRequiredReviews({ github, repository, eventName, sha, p
     if (pr.state === 'closed') return;
     if (pr.state !== 'open') throw new Error('GitHub did not return a valid pull request state');
     const { baseSha, headSha } = baseHead(pr);
-    if (eventHeadSha && eventHeadSha !== headSha) await status(eventHeadSha, 'pending', 'Evaluating required reviews');
     statusHead = headSha;
     await status(headSha, 'pending', 'Evaluating required reviews');
+    if (eventHeadSha && eventHeadSha !== headSha) {
+      await status(eventHeadSha, 'pending', 'Evaluating required reviews').catch(() => {});
+    }
     const assertSamePullRequest = async () => {
       const current = await github.request(prPath);
       if (current.head.sha !== headSha || current.base.sha !== baseSha || current.base.ref !== pr.base.ref || current.head.ref !== pr.head.ref || current.state !== 'open') {

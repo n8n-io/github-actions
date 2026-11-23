@@ -95,7 +95,15 @@ test('merge queue publishes to the queue SHA without reading the PR', async () =
 test('a delayed event reevaluates the current head instead of publishing a verdict on the old SHA', async () => {
   const { options, statuses } = fixture();
   assert.equal(await runRequiredReviews({ ...options, eventHeadSha: base }), 'success');
-  assert.deepEqual(statuses.map(({ sha, state }) => [sha, state]), [[base, 'pending'], [head, 'pending'], [head, 'success']]);
+  assert.deepEqual(statuses.map(({ sha, state }) => [sha, state]), [[head, 'pending'], [base, 'pending'], [head, 'success']]);
+});
+
+test('a rejected status write on the stale event head does not block the current head', async () => {
+  const { options, statuses } = fixture();
+  const request = options.github.request;
+  options.github.request = (path, init) => path.endsWith(`/statuses/${base}`) ? Promise.reject(new Error('Commit unavailable')) : request(path, init);
+  assert.equal(await runRequiredReviews({ ...options, eventHeadSha: base }), 'success');
+  assert.deepEqual(statuses.map(({ sha, state }) => [sha, state]), [[head, 'pending'], [head, 'success']]);
 });
 
 test('a capped GitHub diff does not count as a complete list of changed paths', async () => {
