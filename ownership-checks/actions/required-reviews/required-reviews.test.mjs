@@ -8,14 +8,14 @@ const head = 'a'.repeat(40);
 const base = 'b'.repeat(40);
 const defaultBranch = 'c'.repeat(40);
 const ownersSha = 'd'.repeat(40);
-function fixture({ onFiles = () => {} } = {}) {
+
+function fixture({ files = [{ filename: 'src/service.ts' }], onFiles = () => {} } = {}) {
   const statuses = [];
   const calls = [];
   const repo = { full_name: repository, default_branch: 'master' };
   const pr = { number: 7, state: 'open', head: { sha: head, ref: 'feature', repo }, base: { sha: base, ref: 'master', repo }, labels: [] };
   const review = { user: { login: 'alice' }, state: 'APPROVED' };
   const membership = { state: 'active' };
-  const files = [{ filename: 'src/service.ts' }];
   const owners = { text: '* @n8n-io/platform required' };
   const options = {
     repository,
@@ -64,16 +64,25 @@ test('each verdict uses GitHub for ownership, reviews, and team membership', asy
   assert.ok(statuses.every(status => status.context === 'Required Reviews' && status.target_url === options.runUrl));
 });
 
-test('an upstream failure or a changed PR does not write success', async () => {
+test('a PR changed during evaluation does not write success', async () => {
   const { options, statuses } = fixture({ onFiles: pr => { pr.base.sha = head; } });
   await assert.rejects(runRequiredReviews(options), /changed during/);
   assert.deepEqual(statuses.map(status => status.state), ['pending', 'error']);
+});
 
-  const unavailable = fixture();
-  const request = unavailable.options.github.request;
-  unavailable.options.github.request = (path, init) => path.endsWith('/pulls/7') ? Promise.reject(new Error('GitHub unavailable')) : request(path, init);
-  await assert.rejects(runRequiredReviews(unavailable.options), /GitHub unavailable/);
-  assert.deepEqual(unavailable.statuses.map(status => status.state), ['pending', 'error']);
+test('a failed PR lookup replaces the known status on manual reevaluation', async () => {
+  const { options, statuses } = fixture();
+  const request = options.github.request;
+  options.github.request = (path, init) => path.endsWith('/pulls/7') ? Promise.reject(new Error('GitHub unavailable')) : request(path, init);
+  await assert.rejects(runRequiredReviews({ ...options, eventName: 'workflow_dispatch' }), /GitHub unavailable/);
+  assert.deepEqual(statuses.map(({ sha, state }) => [sha, state]), [[head, 'error']]);
+});
+
+test('a PR already closed at lookup does not receive a status', async () => {
+  const { options, pr, calls } = fixture();
+  pr.state = 'closed';
+  assert.equal(await runRequiredReviews(options), undefined);
+  assert.deepEqual(calls, [`/repos/${repository}/pulls/7`]);
 });
 
 test('merge queue publishes to the queue SHA without reading the PR', async () => {
@@ -96,21 +105,32 @@ test('a capped GitHub diff does not count as a complete list of changed paths', 
 
 test('OWNERS honors the winning rule, both sides of a rename, and test exclusions', () => {
   const rules = '* @n8n-io/platform required\nlegacy/ @n8n-io/old required\ndocs/ @n8n-io/docs\n';
-  const files = [{ filename: 'src/service.ts', previous_filename: 'legacy/service.ts' }, { filename: 'legacy/service.spec.ts' }, { filename: 'docs/page.md' }];
+  const files = [
+    { filename: 'src/service.ts', previous_filename: 'legacy/service.ts' },
+    ...['legacy/service.spec.ts', 'src/test/helper.ts', 'src/tests/helper.ts', 'src/fixtures/helper.ts', 'src/__mocks__/helper.ts', 'docs/page.md'].map(filename => ({ filename })),
+  ];
   assert.deepEqual(resolveRequiredTeams(files, rules).teams, {
     '@n8n-io/old': ['legacy/service.ts'],
     '@n8n-io/platform': ['src/service.ts'],
   });
-  assert.throws(() => resolveRequiredTeams(files, '**/*.ts @n8n-io/platform required'), /Unsupported/);
+});
+
+test('OWNERS rejects unsupported glob and absolute path patterns', () => {
+  for (const pattern of ['**/*.ts', '/src/', '/src/service.ts']) {
+    assert.throws(() => resolveRequiredTeams([], `${pattern} @n8n-io/platform required`), /Unsupported OWNERS pattern on line 1/);
+  }
 });
 
 test('required and involved counts apply together; the author only counts toward involved', async () => {
-  const { options, owners, pr, statuses } = fixture();
+  const { options, owners, pr, statuses } = fixture({ files: [{ filename: 'src/service.ts' }, { filename: 'legacy/service.ts' }] });
   const request = options.github.request;
   options.github.request = (path, init) => path.endsWith('/memberships/author') ? Promise.resolve({ state: 'active' }) : request(path, init);
   owners.text = '* @n8n-io/platform involved(2)';
   pr.user = { login: 'author' };
   assert.equal(await runRequiredReviews(options), 'success');
+  owners.text = '* @n8n-io/platform involved(3)\nsrc/ @n8n-io/platform required(1)';
+  assert.equal(await runRequiredReviews(options), 'pending');
+  assert.equal(statuses.at(-1).description, 'Waiting for approval from: platform');
   owners.text = '* @n8n-io/platform involved(2)\nsrc/ @n8n-io/platform required(3)';
   assert.equal(await runRequiredReviews(options), 'pending');
   assert.equal(statuses.at(-1).description, 'Waiting for approval from: 2 from platform');

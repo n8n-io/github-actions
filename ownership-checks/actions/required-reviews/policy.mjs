@@ -11,7 +11,9 @@ export function resolveRequiredTeams(files, content) {
     if (!/^@[\w.-]+\/[\w.-]+$/.test(team ?? '') || extra.length || (option && !review) || count < 1 || count > 5) {
       throw new Error(`Invalid OWNERS rule on line ${index + 1}`);
     }
-    if (pattern !== '*' && /[*?[]/.test(pattern)) throw new Error(`Unsupported OWNERS pattern on line ${index + 1}`);
+    if (pattern.startsWith('/') || (pattern !== '*' && /[*?[]/.test(pattern))) {
+      throw new Error(`Unsupported OWNERS pattern on line ${index + 1}`);
+    }
     return [{ pattern, team, review: review?.[1], count }];
   }).reverse();
 

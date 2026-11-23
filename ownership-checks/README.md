@@ -29,16 +29,18 @@ version keeps working, and a fix here reaches a repository when it updates its
 pin.
 
 Required reviews need a GitHub App installed on the calling repository. Grant
-**Contents: read**, **Pull requests: read**, **Members: read**
-at the organization level, and **Commit statuses: write**. Pass the Actions
-secrets `N8N_DEVHUB_APP_ID` and `N8N_DEVHUB_PRIVATE_KEY` as
-`required-reviews-app-id` and `required-reviews-app-key`. Limit access to the private key to participating
-repositories. The workflow uses a short-lived installation token scoped to the
-calling repository. Never use a PR checkout in this workflow.
+repository permissions **Contents: read**, **Pull requests: read**, and
+**Commit statuses: write**, plus the organization permission **Members: read**.
+Pass the credentials for the App trusted by the ruleset as
+`required-reviews-app-id` and `required-reviews-app-key`. Limit access to the
+private key to participating repositories. The workflow uses a short-lived
+installation token scoped to the calling repository. Never use a PR checkout in
+this workflow.
 
 ## Usage
 
-Add a workflow like this to the repository and replace the pinned SHA. The
+Add a workflow like this to the repository and replace the pinned SHA and
+version comment with the release you are using. The
 triggers decide which checks can run; each step ignores the events that cannot
 change its result.
 
@@ -62,15 +64,15 @@ permissions: {}
 
 jobs:
   ownership:
-    uses: n8n-io/github-actions/.github/workflows/ownership-checks.yml@<sha>
+    uses: n8n-io/github-actions/.github/workflows/ownership-checks.yml@<sha> # ownership-checks/v2.0.0
     permissions:
       id-token: write
       pull-requests: read
     with:
       pull-request-number: ${{ inputs.pr_number }}
     secrets:
-      required-reviews-app-id: ${{ secrets.N8N_DEVHUB_APP_ID }}
-      required-reviews-app-key: ${{ secrets.N8N_DEVHUB_PRIVATE_KEY }}
+      required-reviews-app-id: ${{ secrets.REQUIRED_REVIEWS_APP_ID }}
+      required-reviews-app-key: ${{ secrets.REQUIRED_REVIEWS_APP_PRIVATE_KEY }}
 ```
 
 `pull_request_target` is safe here: no job checks out or runs code from the pull
@@ -98,7 +100,9 @@ dispatch the workflow with its number.
    configured App, not from any publisher. If the App is already the required
    publisher, the ruleset can stay unchanged. Prefer a dedicated App over
    distributing an existing App's broader private key.
-2. Update the pin and pass both App secrets in the monorepo caller. If using a new
+2. Update the pin and pass both App secrets in the monorepo caller. To retain
+   the existing DevHub App as publisher, map `N8N_DEVHUB_APP_ID` and
+   `N8N_DEVHUB_PRIVATE_KEY`. If using a new
    App, coordinate the ruleset update in the same cutover; otherwise GitHub
    ignores the new publisher's status. Let old runs finish and re-evaluate open
    PRs. If the publisher changes, let the queue drain or requeue entries so
@@ -111,7 +115,8 @@ publisher in the ruleset. Re-evaluate the affected PRs.
 ## Requirements
 
 - An `OWNERS` file at the root of the default branch. Each line is a pattern
-  (`*`, a directory such as `packages/cli/`, or an exact path), one
+  (`*`, a repo-relative directory such as `packages/cli/`, or an exact
+  repo-relative path), one
   `@n8n-io/<team>` handle, and optionally `required`. A repository without an
   `OWNERS` file gets an `error` status.
 - `DEVHUB_URL` (or `devhub-url`) is only used for the ownership comment. Without

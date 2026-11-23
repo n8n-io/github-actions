@@ -51,7 +51,6 @@ export async function runRequiredReviews({ github, repository, eventName, sha, p
   if (!Number.isSafeInteger(pullRequestNumber) || pullRequestNumber <= 0) throw new Error('Invalid pull request number');
   const prPath = `${root}/pulls/${pullRequestNumber}`;
   let statusHead = eventHeadSha;
-  if (statusHead) await status(statusHead, 'pending', 'Evaluating required reviews');
 
   try {
     const pr = await github.request(prPath);
@@ -59,10 +58,9 @@ export async function runRequiredReviews({ github, repository, eventName, sha, p
     if (pr.state === 'closed') return;
     if (pr.state !== 'open') throw new Error('GitHub did not return a valid pull request state');
     const { baseSha, headSha } = baseHead(pr);
-    if (headSha !== statusHead) {
-      statusHead = headSha;
-      await status(headSha, 'pending', 'Evaluating required reviews');
-    }
+    if (eventHeadSha && eventHeadSha !== headSha) await status(eventHeadSha, 'pending', 'Evaluating required reviews');
+    statusHead = headSha;
+    await status(headSha, 'pending', 'Evaluating required reviews');
     const assertSamePullRequest = async () => {
       const current = await github.request(prPath);
       if (current.head.sha !== headSha || current.base.sha !== baseSha || current.base.ref !== pr.base.ref || current.head.ref !== pr.head.ref || current.state !== 'open') {

@@ -81,7 +81,7 @@ jobs:
                 echo "::error::Pass pull-request-number on workflow_dispatch runs."
                 exit 1
               fi
-              sha=''
+              sha="$(gh api "repos/${GITHUB_REPOSITORY}/pulls/${number}" --jq .head.sha)"
               ;;
             *)
               number="$EVENT_NUMBER"
