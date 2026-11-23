@@ -69,7 +69,7 @@ runs:
 
     - name: Resolve PR context
       id: context
-      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         ACTION_PATH: ${{ github.action_path }}
         PR_NUMBER: ${{ inputs.pr-number }}
@@ -81,7 +81,7 @@ runs:
 
     - name: Post pending commit status
       if: steps.context.outputs.head_sha != ''
-      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         HEAD_SHA: ${{ steps.context.outputs.head_sha }}
         STATUS_CONTEXT: ${{ inputs.status-context }}
@@ -99,7 +99,7 @@ runs:
 
     - name: Check CLA signatures
       id: check
-      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         ACTION_PATH: ${{ github.action_path }}
         PR_NUMBER: ${{ steps.context.outputs.pr_number }}
@@ -115,7 +115,7 @@ runs:
 
     - name: Post final commit status
       if: always() && steps.context.outputs.head_sha != ''
-      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         ACTION_PATH: ${{ github.action_path }}
         HEAD_SHA: ${{ steps.context.outputs.head_sha }}
@@ -138,7 +138,7 @@ runs:
         always() &&
         steps.context.outputs.pr_number != '' &&
         steps.check.outputs.all_signed != ''
-      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         ACTION_PATH: ${{ github.action_path }}
         PR_NUMBER: ${{ steps.context.outputs.pr_number }}
@@ -160,7 +160,7 @@ runs:
         inputs.apply-label == 'true' &&
         steps.context.outputs.pr_number != '' &&
         steps.check.outputs.all_signed != ''
-      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         ACTION_PATH: ${{ github.action_path }}
         PR_NUMBER: ${{ steps.context.outputs.pr_number }}
@@ -174,7 +174,7 @@ runs:
 
     - name: React to /cla-check comment
       if: always() && github.event_name == 'issue_comment' && steps.check.outputs.all_signed != ''
-      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+      uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
       env:
         ALL_SIGNED: ${{ steps.check.outputs.all_signed }}
       with:
