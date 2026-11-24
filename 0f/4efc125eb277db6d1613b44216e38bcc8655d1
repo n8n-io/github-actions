@@ -1,0 +1,34 @@
+README.md
+  h_52a137d26d774c 10
+ownership-checks/README.md
+  h_52a137d26d774c 19-30
+ownership-checks/actions/assign-reviewers/README.md
+  h_52a137d26d774c 1-108
+ownership-checks/actions/assign-reviewers/action.yml
+  h_52a137d26d774c 1-50
+ownership-checks/actions/assign-reviewers/assign-reviewers.test.mjs
+  h_52a137d26d774c 1-285
+ownership-checks/actions/required-reviews/policy.mjs
+  h_52a137d26d774c 1
+ownership-checks/examples/assign-reviewers-labels.yml
+  h_52a137d26d774c 1-39
+ownership-checks/examples/assign-reviewers-ready.yml
+  h_52a137d26d774c 1-25
+ownership-checks/scripts/assign-reviewers.mjs
+  h_52a137d26d774c 1-110
+ownership-checks/scripts/owners.mjs
+  h_52a137d26d774c 1-59
+package.json
+  h_52a137d26d774c 7
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "0f4efc125eb277db6d1613b44216e38bcc8655d1",
+  "prompts": {},
+  "humans": {
+    "h_52a137d26d774c": {
+      "author": "Matsuuu <matias.huhta@n8n.io>"
+    }
+  }
+}
