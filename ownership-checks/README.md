@@ -16,7 +16,7 @@ separate job that calls DevHub.
 | [`.github/workflows/ownership-checks.yml`](../.github/workflows/ownership-checks.yml) | Dispatches evaluations and optional comments |
 | [`actions/call-devhub`](./actions/call-devhub) | Gets a GitHub Actions OIDC token and calls a DevHub CI API, with retries |
 | [`actions/required-reviews`](./actions/required-reviews) | Evaluates required reviews and publishes the status using the configured GitHub App |
-| [`actions/assign-reviewers`](./actions/assign-reviewers) | Requests all or required owner teams on events selected by the calling repository |
+| [`actions/assign-reviewers`](./actions/assign-reviewers) | Requests all, required, or label-selected owner teams on events selected by the calling repository |
 
 ## Reviewer assignment
 

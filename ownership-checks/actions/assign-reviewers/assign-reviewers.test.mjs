@@ -81,6 +81,27 @@ test('assignment and required review checks share the same required team resolut
   assert.deepEqual(resolveOwnerTeamHandles(files, content, true), Object.keys(resolveRequiredTeams(files, content).teams));
 });
 
+for (const extension of ['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'mts', 'cts']) {
+  test(`required owners exclude test files, but not production files, with .${extension} extensions`, () => {
+    const rules = '* @acme/backend required';
+    const tests = ['test', 'spec'].map(suffix => ({ filename: `src/service.${suffix}.${extension}` }));
+    assert.deepEqual(resolveOwnerTeamHandles(tests, rules, true), []);
+    assert.deepEqual(resolveRequiredTeams(tests, rules), { teams: {}, rules: {} });
+    assert.deepEqual(resolveOwnerTeamHandles(tests, rules, false), ['@acme/backend']);
+    assert.deepEqual(resolveOwnerTeamHandles([{ filename: `src/service.${extension}` }], rules, true), ['@acme/backend']);
+  });
+}
+
+test('case variants of one team are requested once and share review counts', async () => {
+  const { options, owners } = fixture();
+  const rules = '* @Acme/Backend required(2)\nui/ @acme/backend involved(3)';
+  owners.content = Buffer.from(rules).toString('base64');
+  assert.deepEqual(await runAssignReviewers(options), ['backend']);
+  assert.deepEqual(resolveRequiredTeams(files, rules).rules, {
+    '@acme/backend': { approvals: 2, involved: 3 },
+  });
+});
+
 for (const [labels, teams] of [
   [[allLabel], ['optional', 'backend', 'quality', 'frontend']],
   [[requiredLabel], ['backend', 'frontend']],
@@ -191,8 +212,10 @@ test('no matching teams leaves trigger labels in place without a completion mark
 test('closed pull requests do not request reviews', async () => {
   const { options, pr, writes } = fixture();
   pr.state = 'closed';
-  assert.deepEqual(await runAssignReviewers(options), []);
+  pr.labels = [allLabel, assignedLabel].map(name => ({ name }));
+  assert.deepEqual(await runAssignReviewers({ ...options, owners: 'labels' }), []);
   assert.deepEqual(writes(), []);
+  assert.deepEqual(pr.labels, [allLabel, assignedLabel].map(name => ({ name })));
 });
 
 test('incomplete file lists fail without writing labels or requesting reviews', async () => {
@@ -251,7 +274,8 @@ test('removing an already absent trigger is safe, but other API failures propaga
   await assert.rejects(runAssignReviewers({ ...options, owners: 'labels' }), /Forbidden/);
 });
 
-for (const rule of ['* @other/team', '* @acme/team required(0)', '**/*.ts @acme/team', '* @acme/team unknown']) {
+for (const rule of ['* @other/team', '* @acme/team required(0)', '**/*.ts @acme/team', '* @acme/team unknown',
+  './src/ @acme/team required', './src/service.ts @acme/team required']) {
   test(`invalid OWNERS rule does not request reviews: ${rule}`, async () => {
     const { options, owners, writes } = fixture();
     owners.content = Buffer.from(rule).toString('base64');

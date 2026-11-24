@@ -16,10 +16,12 @@ Label names are matched case-insensitively, as on GitHub. Trigger labels and
 the completion marker must have distinct names.
 
 The action uses the same parser as the required-review check. Rules use
-last-match-wins. Both paths of a renamed file count. Each team is requested once.
+last-match-wins. Both paths of a renamed file count. Team handles are normalized
+to lowercase, and each team is requested once.
 Supported patterns are `*`, a repository-relative directory with a trailing
-`/`, or an exact file path. Each rule has one `@org/team` handle and an optional
-`required(k)` or `involved(k)` option. Counts are 1–5 and default to 1.
+`/`, or an exact file path, without a leading `/` or `./`. Each rule has one
+`@org/team` handle and an optional `required(k)` or `involved(k)` option.
+Counts are 1–5 and default to 1.
 
 The action reads the OWNERS file from the calling repository's default branch
 through the GitHub API. It does not read or run PR code. Teams must belong to
@@ -41,9 +43,10 @@ The `teams` output is a JSON array of team slugs requested by this run. It is
 `[]` when the action skips assignment or no teams match.
 
 After a successful request, the action adds the completion marker. In label
-mode, it then removes the trigger labels. A run that sees the marker skips
-assignment and removes any trigger labels. Remove the marker to allow another
-assignment. Set `assigned-label: ''` to allow assignment on every selected event.
+mode, it then removes the trigger labels. On an open PR, a run that sees the
+marker skips assignment and removes any trigger labels. Closed PRs are left
+unchanged. Remove the marker to allow another assignment.
+Set `assigned-label: ''` to allow assignment on every selected event.
 
 If no teams match or a request fails, the action leaves the trigger labels in
 place. A label-only workflow does not retry on pushes: remove and reapply a

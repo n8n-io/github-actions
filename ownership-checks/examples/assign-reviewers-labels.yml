@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   assign-reviewers:
+    # Keep this label gate aligned with the action inputs below.
     if: |
       github.event.pull_request.head.repo.full_name == github.repository &&
       (github.event.pull_request.user.type != 'Bot' ||
@@ -37,3 +38,5 @@ jobs:
         with:
           token: ${{ steps.app-token.outputs.token }}
           owners: labels
+          all-owners-label: Auto-assign reviewers
+          required-owners-label: Auto-assign required reviewers

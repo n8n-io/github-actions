@@ -1,4 +1,4 @@
-const testFile = /(?:^|\/)(?:[^/]*\.(?:test|spec)\.(?:ts|js|mjs)|[^/]*\.snap)$|(?:^|\/)(?:test|tests|__tests__|__snapshots__|fixtures|__mocks__)\/|^packages\/quality\/(?:policy|testing|environments|efficiency\/microbenchmarks)\//;
+const testFile = /(?:^|\/)(?:[^/]*\.(?:test|spec)\.(?:ts|tsx|js|jsx|mjs|cjs|mts|cts)|[^/]*\.snap)$|(?:^|\/)(?:test|tests|__tests__|__snapshots__|fixtures|__mocks__)\/|^packages\/quality\/(?:policy|testing|environments|efficiency\/microbenchmarks)\//;
 
 /** @typedef {{ filename: string, previous_filename?: string }} ChangedFile */
 /** @typedef {{ approvals: number, involved: number }} ReviewRule */
@@ -19,10 +19,10 @@ function resolveOwnership(files, content, requiredOnly) {
     if (!/^@[\w.-]+\/[\w.-]+$/.test(team ?? '') || extra.length || (option && !review) || count < 1 || count > 5) {
       throw new Error(`Invalid OWNERS rule on line ${index + 1}`);
     }
-    if (pattern.startsWith('/') || (pattern !== '*' && /[*?[]/.test(pattern))) {
+    if (pattern.startsWith('/') || pattern.startsWith('./') || (pattern !== '*' && /[*?[]/.test(pattern))) {
       throw new Error(`Unsupported OWNERS pattern on line ${index + 1}`);
     }
-    return [{ pattern, team, review: review?.[1], count }];
+    return [{ pattern, team: team.toLowerCase(), review: review?.[1], count }];
   }).reverse();
 
   /** @type {Record<string, string[]>} */
