@@ -1,0 +1,50 @@
+name: Assign owner reviewers
+description: Request reviews from all or required OWNERS teams, on events chosen by the caller
+
+inputs:
+  token:
+    description: GitHub token with contents read and pull requests write
+    required: true
+  pull-request-number:
+    description: Pull request number; defaults to the pull request in the event
+    default: ${{ github.event.pull_request.number }}
+  owners:
+    description: 'Teams to request: all, required, or labels (all wins when both labels are present)'
+    default: all
+  owners-file:
+    description: OWNERS file path in the default branch of the calling repository
+    default: OWNERS
+  all-owners-label:
+    description: Label that selects all owners when owners is labels
+    default: Auto-assign reviewers
+  required-owners-label:
+    description: Label that selects required owners when owners is labels
+    default: Auto-assign required reviewers
+  assigned-label:
+    description: Completion label that prevents repeat requests; set empty to disable
+    default: Reviewers auto-assigned
+
+outputs:
+  teams:
+    description: JSON array of team slugs requested by this run
+    value: ${{ steps.assign.outputs.teams }}
+
+runs:
+  using: composite
+  steps:
+    - name: Assign reviewers
+      id: assign
+      uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        PR_NUMBER: ${{ inputs.pull-request-number }}
+        OWNERS: ${{ inputs.owners }}
+        OWNERS_FILE: ${{ inputs.owners-file }}
+        ALL_OWNERS_LABEL: ${{ inputs.all-owners-label }}
+        REQUIRED_OWNERS_LABEL: ${{ inputs.required-owners-label }}
+        ASSIGNED_LABEL: ${{ inputs.assigned-label }}
+      with:
+        github-token: ${{ inputs.token }}
+        script: |
+          const { default: assignReviewers } = await import(`${process.env.ACTION_PATH}/../../scripts/assign-reviewers.mjs`);
+          await assignReviewers({ github, context, core });

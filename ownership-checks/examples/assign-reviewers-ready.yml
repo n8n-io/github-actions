@@ -1,0 +1,25 @@
+name: Assign owner reviewers
+
+on:
+  pull_request:
+    types: [ready_for_review]
+
+permissions:
+  contents: read
+
+jobs:
+  assign-reviewers:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    concurrency:
+      group: owners-assign-reviewers-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: n8n-io/github-actions/ownership-checks/actions/assign-reviewers@<sha> # ownership-checks/vX.Y.Z
+        with:
+          token: ${{ github.token }}
+          owners: required

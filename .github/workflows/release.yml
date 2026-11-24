@@ -150,6 +150,19 @@ jobs:
             echo '```yaml'
             echo "- uses: ${{ github.repository }}/$REF_PATH@$SHA # v$VERSION"
             echo '```'
+            if [ "$PACKAGE" = ownership-checks ]; then
+              echo
+              echo '### Assign owner reviewers'
+              echo
+              echo '```yaml'
+              echo "- uses: ${{ github.repository }}/ownership-checks/actions/assign-reviewers@$SHA # v$VERSION"
+              echo '  with:'
+              printf '    token: $%s\n' '{{ github.token }}'
+              echo '    owners: all'
+              echo '```'
+              echo
+              echo 'Requires Contents: read and Pull requests: write. Choose triggers in the calling workflow.'
+            fi
             echo
             echo "### Changes"
             echo
