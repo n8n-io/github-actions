@@ -1,0 +1,22 @@
+ownership-checks/README.md
+  h_52a137d26d774c 19
+ownership-checks/actions/assign-reviewers/README.md
+  h_52a137d26d774c 19-20,22-24,46-49
+ownership-checks/actions/assign-reviewers/assign-reviewers.test.mjs
+  h_52a137d26d774c 84-104,215-216,218,277-278
+ownership-checks/examples/assign-reviewers-labels.yml
+  h_52a137d26d774c 13,41-42
+ownership-checks/scripts/owners.mjs
+  h_52a137d26d774c 1,22,25
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "bb7b6b3ee8b269e3cd6c0377ed57385d79209609",
+  "prompts": {},
+  "humans": {
+    "h_52a137d26d774c": {
+      "author": "Matsuuu <matias.huhta@n8n.io>"
+    }
+  }
+}
