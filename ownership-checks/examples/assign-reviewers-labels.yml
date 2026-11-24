@@ -1,0 +1,39 @@
+name: 'CI: Owners Assign Reviewers'
+
+on:
+  pull_request:
+    types: [labeled]
+    branches: [master]
+
+permissions:
+  contents: read
+
+jobs:
+  assign-reviewers:
+    if: |
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      (github.event.pull_request.user.type != 'Bot' ||
+       github.event.pull_request.user.login == 'n8n-cat-bot[bot]') &&
+      (github.event.label.name == 'Auto-assign reviewers' ||
+       github.event.label.name == 'Auto-assign required reviewers')
+    concurrency:
+      group: owners-assign-reviewers-${{ github.event.pull_request.number }}
+      cancel-in-progress: false
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - name: Generate App Token
+        id: app-token
+        uses: actions/create-github-app-token@29824e69f54612133e76f7eaac726eef6c875baf # v2.2.1
+        with:
+          app-id: ${{ secrets.N8N_ASSISTANT_APP_ID }}
+          private-key: ${{ secrets.N8N_ASSISTANT_PRIVATE_KEY }}
+
+      - name: Assign reviewer teams
+        uses: n8n-io/github-actions/ownership-checks/actions/assign-reviewers@<sha> # ownership-checks/vX.Y.Z
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          owners: labels
