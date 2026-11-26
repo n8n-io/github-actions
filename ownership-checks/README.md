@@ -128,14 +128,36 @@ publisher in the ruleset. Re-evaluate the affected PRs.
 
 - An `OWNERS` file at the root of the default branch. Each line is a pattern
   (`*`, a repo-relative directory such as `packages/cli/`, or an exact
-  repo-relative path), one
-  `@n8n-io/<team>` handle, and optionally `required`. A repository without an
-  `OWNERS` file gets an `error` status.
+  repo-relative path), one `@n8n-io/<team>` handle or
+  [team alias](#team-aliases), and optionally `required`. A repository without
+  an `OWNERS` file gets an `error` status.
 - `DEVHUB_URL` (or `devhub-url`) is only used for the ownership comment. Without
   it, the comment job is skipped.
 
 A DevHub outage does not affect the verdict. Failure to verify approvals
 against GitHub still does not produce a pass.
+
+## Team aliases
+
+An `OWNERS` rule can use an alias from [`TEAM_ALIASES`](./TEAM_ALIASES) in
+place of a team handle. Each line is an alias handle, `or` or `and`, and one or
+more team handles:
+
+```
+@n8n-io/ai                    or   @n8n-io/ai-agents @n8n-io/ai-assistant @n8n-io/ai-trust
+@n8n-io/developer-experience  or   @n8n-io/qa-dx
+```
+
+- `or`: The rule applies once to all the listed teams together. An approval
+  from a member of any listed team counts. For `involved(k)`, an author who is
+  an active member of any listed team counts as one reviewer.
+- `and`: The rule applies to each listed team separately, as if `OWNERS` had
+  one rule for each team.
+
+Reviewer assignment requests every listed team for both modes. An alias has
+priority over a GitHub team with the same handle. Targets must be teams in the
+same organization as the alias, not other aliases. The file ships with the
+action, so a change takes effect in a repository when it updates its pin.
 
 ## Inputs
 

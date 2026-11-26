@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import assignReviewers, { runAssignReviewers } from '../../scripts/assign-reviewers.mjs';
-import { resolveOwnerTeamHandles, resolveRequiredTeams } from '../../scripts/owners.mjs';
+import { parseTeamAliases, resolveOwnerTeamHandles, resolveRequiredTeams } from '../../scripts/owners.mjs';
 
 const allLabel = 'Auto-assign reviewers';
 const requiredLabel = 'Auto-assign required reviewers';
@@ -98,7 +98,7 @@ test('case variants of one team are requested once and share review counts', asy
   owners.content = Buffer.from(rules).toString('base64');
   assert.deepEqual(await runAssignReviewers(options), ['backend']);
   assert.deepEqual(resolveRequiredTeams(files, rules).rules, {
-    '@acme/backend': { approvals: 2, involved: 3 },
+    '@acme/backend': { teams: ['@acme/backend'], approvals: 2, involved: 3 },
   });
 });
 
@@ -306,4 +306,12 @@ test('the action entry point maps its inputs and outputs', async () => {
     core: { info: () => {}, setOutput: (...args) => outputs.push(args) },
   }, { PR_NUMBER: '42', OWNERS: 'required' });
   assert.deepEqual(outputs, [['teams', ['backend', 'frontend']]]);
+});
+
+test('aliases request every team they name', () => {
+  const aliases = parseTeamAliases('@acme/web or @acme/ui @acme/design\n@acme/release and @acme/qa @acme/ops');
+  const rules = '* @acme/web\ndocs/ @acme/release required';
+  const changes = [{ filename: 'src/page.ts' }, { filename: 'docs/guide.md' }];
+  assert.deepEqual(resolveOwnerTeamHandles(changes, rules, false, aliases), ['@acme/qa', '@acme/ops', '@acme/design', '@acme/ui']);
+  assert.deepEqual(resolveOwnerTeamHandles(changes, rules, true, aliases), ['@acme/qa', '@acme/ops']);
 });

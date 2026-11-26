@@ -104,7 +104,7 @@ export async function runRequiredReviews({ github, repository, eventName, sha, p
       }
 
       const { rules } = resolveRequiredTeams(files, Buffer.from(owners.content, 'base64').toString('utf8'));
-      const teams = Object.entries(rules);
+      const teams = Object.values(rules);
       if (!teams.length) return ['success', 'No team approval is required for these changes'];
       const approvers = collectApprovers(await github.pages(`${prPath}/reviews`));
       if (n8n && approvers.includes('n8n-release-helper[bot]')) return ['success', 'Owners check skipped by n8n Release Helper'];
@@ -112,16 +112,21 @@ export async function runRequiredReviews({ github, repository, eventName, sha, p
       const author = pr.user?.login;
       const reviewers = approvers.filter(approver => approver.toLowerCase() !== author?.toLowerCase());
       const missing = [];
-      for (const [handle, rule] of teams) {
-        const team = handle.split('/')[1];
-        const authorIsMember = rule.involved > 0 && author ? await isMember(team, author) : false;
+      for (const rule of teams) {
+        const slugs = rule.teams.map(handle => handle.split('/')[1]);
+        const isGroupMember = async login => {
+          for (const team of slugs) if (await isMember(team, login)) return true;
+          return false;
+        };
+        const authorIsMember = rule.involved > 0 && author ? await isGroupMember(author) : false;
         let approvals = 0;
         for (const login of reviewers) {
           if (missingApprovals(rule, approvals, authorIsMember) === 0) break;
-          if (await isMember(team, login)) approvals++;
+          if (await isGroupMember(login)) approvals++;
         }
         const needed = missingApprovals(rule, approvals, authorIsMember);
-        if (needed > 0) missing.push(needed === 1 ? team : `${needed} from ${team}`);
+        const name = slugs.join(' or ');
+        if (needed > 0) missing.push(needed === 1 ? name : `${needed} from ${name}`);
       }
       return missing.length
         ? ['pending', `Waiting for approval from: ${missing.join(', ')}`]

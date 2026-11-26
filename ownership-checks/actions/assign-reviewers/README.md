@@ -20,7 +20,9 @@ last-match-wins. Both paths of a renamed file count. Team handles are normalized
 to lowercase, and each team is requested once.
 Supported patterns are `*`, a repository-relative directory with a trailing
 `/`, or an exact file path, without a leading `/` or `./`. Each rule has one
-`@org/team` handle and an optional `required(k)` or `involved(k)` option.
+`@org/team` handle and an optional `required(k)` or `involved(k)` option. A
+handle can be a [team alias](../../README.md#team-aliases). The action requests
+every team that the alias names.
 Counts are 1–5 and default to 1.
 
 The action reads the OWNERS file from the calling repository's default branch

@@ -1,0 +1,15 @@
+# Team aliases for OWNERS
+#
+# Format: <@org/alias> <or|and> <@org/team> [<@org/team> ...]
+#
+#   or   An approval from a member of any listed team counts toward the rule.
+#   and  Each listed team must give the approvals that the rule requires.
+#
+# An OWNERS rule can use an alias in place of a team handle. An alias has
+# priority over a GitHub team with the same handle. Targets must be GitHub
+# teams in the same organization, not other aliases.
+#
+# Consuming repositories get a change to this file when they update their pin.
+
+@n8n-io/ai                    or  @n8n-io/ai-agents @n8n-io/ai-assistant @n8n-io/ai-trust
+@n8n-io/developer-experience  or  @n8n-io/qa-dx
