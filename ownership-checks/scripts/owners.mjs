@@ -72,15 +72,19 @@ function resolveOwnership(files, content, requiredOnly, aliases) {
   const teams = {};
   /** @type {Record<string, ReviewRule>} */
   const rules = {};
+  /** @type {string[]} */
+  const otherPaths = [];
   if (files.some(file => typeof file?.filename !== 'string' || !file.filename ||
     (file.previous_filename !== undefined && typeof file.previous_filename !== 'string'))) {
     throw new Error('GitHub did not return valid changed paths');
   }
   const paths = new Set(files.flatMap(file => file.previous_filename ? [file.filename, file.previous_filename] : [file.filename]));
   for (const path of [...paths].sort()) {
-    if (requiredOnly && testFile.test(path)) continue;
-    const entry = entries.find(({ pattern }) => pattern === '*' || (pattern.endsWith('/') ? path.startsWith(pattern) : path === pattern));
-    if (!entry || (requiredOnly && !entry.review)) continue;
+    const entry = requiredOnly && testFile.test(path) ? undefined : entries.find(({ pattern }) => pattern === '*' || (pattern.endsWith('/') ? path.startsWith(pattern) : path === pattern));
+    if (!entry || (requiredOnly && !entry.review)) {
+      otherPaths.push(path);
+      continue;
+    }
     for (const group of entry.groups) {
       for (const team of group) (teams[team] ??= []).push(path);
       const rule = rules[group.join(' ')] ??= { teams: group, approvals: 0, involved: 0 };
@@ -90,7 +94,7 @@ function resolveOwnership(files, content, requiredOnly, aliases) {
       }
     }
   }
-  return { teams, rules };
+  return { teams, rules, otherPaths };
 }
 
 /** @param {ChangedFile[]} files @param {string} content @param {TeamAliases} [aliases] */

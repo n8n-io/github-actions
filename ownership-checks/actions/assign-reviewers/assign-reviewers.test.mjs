@@ -86,7 +86,7 @@ for (const extension of ['ts', 'tsx', 'js', 'jsx', 'mjs', 'cjs', 'mts', 'cts']) 
     const rules = '* @acme/backend required';
     const tests = ['test', 'spec'].map(suffix => ({ filename: `src/service.${suffix}.${extension}` }));
     assert.deepEqual(resolveOwnerTeamHandles(tests, rules, true), []);
-    assert.deepEqual(resolveRequiredTeams(tests, rules), { teams: {}, rules: {} });
+    assert.deepEqual(resolveRequiredTeams(tests, rules), { teams: {}, rules: {}, otherPaths: tests.map(({ filename }) => filename).sort() });
     assert.deepEqual(resolveOwnerTeamHandles(tests, rules, false), ['@acme/backend']);
     assert.deepEqual(resolveOwnerTeamHandles([{ filename: `src/service.${extension}` }], rules, true), ['@acme/backend']);
   });
