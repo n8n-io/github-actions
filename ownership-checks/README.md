@@ -63,7 +63,7 @@ on:
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review, edited, labeled, unlabeled]
   pull_request_review:
-    types: [submitted, dismissed]
+    types: [submitted, edited, dismissed]
   merge_group:
   workflow_dispatch:
     inputs:
@@ -136,6 +136,28 @@ publisher in the ruleset. Re-evaluate the affected PRs.
 
 A DevHub outage does not affect the verdict. Failure to verify approvals
 against GitHub still does not produce a pass.
+
+## Approvals for required files only
+
+A reviewer can approve only the files that have a `required` or `involved`
+owner. To do this, write `!required` in the approval message. GitHub counts
+this approval for the general approval rule of the branch, but the approval
+does not cover the other files in the PR. Other files are files without an
+owner, files with an owner but no `required` or `involved` option, and test
+files.
+
+- A `!required` approval counts toward team rules as usual.
+- If the PR has other files and all approvals use `!required`,
+  `Required Reviews` stays `pending` with
+  `Waiting for approval from: any reviewer without !required for <n> other files`.
+- One approval without `!required` from a reviewer who is not the author
+  removes this block.
+- The latest approval of each reviewer applies. To change it, edit the
+  approval message or submit a new approval. The `edited` review trigger
+  makes the workflow evaluate the PR again after an edit.
+
+The check requires one full approval. If the branch requires more than one
+approval, GitHub can count `!required` approvals for the remaining approvals.
 
 ## Team aliases
 

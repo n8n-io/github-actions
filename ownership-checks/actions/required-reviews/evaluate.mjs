@@ -103,14 +103,18 @@ export async function runRequiredReviews({ github, repository, eventName, sha, p
         throw new Error('GitHub did not return an OWNERS file');
       }
 
-      const { rules } = resolveRequiredTeams(files, Buffer.from(owners.content, 'base64').toString('utf8'));
+      const { rules, otherPaths } = resolveRequiredTeams(files, Buffer.from(owners.content, 'base64').toString('utf8'));
       const teams = Object.values(rules);
-      if (!teams.length) return ['success', 'No team approval is required for these changes'];
       const approvers = collectApprovers(await github.pages(`${prPath}/reviews`));
-      if (n8n && approvers.includes('n8n-release-helper[bot]')) return ['success', 'Owners check skipped by n8n Release Helper'];
+      if (n8n && approvers.some(({ login }) => login === 'n8n-release-helper[bot]')) return ['success', 'Owners check skipped by n8n Release Helper'];
 
-      const author = pr.user?.login;
-      const reviewers = approvers.filter(approver => approver.toLowerCase() !== author?.toLowerCase());
+      const author = pr.user?.login?.toLowerCase();
+      const reviewApprovals = approvers.filter(({ login }) => login !== author);
+      const reviewers = reviewApprovals.map(({ login }) => login);
+      // GitHub counts a `!required` approval, so the other files need a full approval.
+      const needsFullApproval = otherPaths.length > 0 &&
+        reviewApprovals.some(({ requiredOnly }) => requiredOnly) && !reviewApprovals.some(({ requiredOnly }) => !requiredOnly);
+      if (!teams.length && !needsFullApproval) return ['success', 'No team approval is required for these changes'];
       const missing = [];
       for (const rule of teams) {
         const slugs = rule.teams.map(handle => handle.split('/')[1]);
@@ -128,6 +132,7 @@ export async function runRequiredReviews({ github, repository, eventName, sha, p
         const name = slugs.join(' or ');
         if (needed > 0) missing.push(needed === 1 ? name : `${needed} from ${name}`);
       }
+      if (needsFullApproval) missing.push(`any reviewer without !required for ${otherPaths.length} other file${otherPaths.length === 1 ? '' : 's'}`);
       return missing.length
         ? ['pending', `Waiting for approval from: ${missing.join(', ')}`]
         : ['success', `All required team approvals are present (${teams.length} owner${teams.length === 1 ? '' : 's'})`];
