@@ -130,7 +130,7 @@ export async function runRequiredReviews({ github, repository, eventName, sha, p
       }
       return missing.length
         ? ['pending', `Waiting for approval from: ${missing.join(', ')}`]
-        : ['success', `All required team approvals are present (${teams.length} team${teams.length === 1 ? '' : 's'})`];
+        : ['success', `All required team approvals are present (${teams.length} owner${teams.length === 1 ? '' : 's'})`];
     })();
 
     await assertSamePullRequest();

@@ -22,13 +22,17 @@ function lines(content) {
 export function parseTeamAliases(content) {
   /** @type {TeamAliases} */
   const aliases = new Map();
-  const parsed = lines(content).map(({ fields: [alias, mode, ...targets], number }) => {
+  const parsed = lines(content).map(({ fields: [alias = '', mode, ...targets], number }) => {
+    const invalid = (/** @type {string} */ reason) => new Error(`Invalid team alias on line ${number}: ${reason}`);
+    if (!handlePattern.test(alias)) throw invalid(`"${alias}" is not an @org/name handle`);
+    if (mode !== 'or' && mode !== 'and') throw invalid(`the mode must be "or" or "and", not "${mode ?? ''}"`);
+    if (!targets.length) throw invalid('no team handles follow the mode');
+    const org = alias.toLowerCase().split('/')[0];
     const handles = targets.map(target => target.toLowerCase());
-    const org = alias?.toLowerCase().split('/')[0];
-    if (!handlePattern.test(alias ?? '') || !['or', 'and'].includes(mode) || !handles.length ||
-      new Set(handles).size !== handles.length ||
-      handles.some(handle => !handlePattern.test(handle) || handle.split('/')[0] !== org)) {
-      throw new Error(`Invalid team alias on line ${number}`);
+    for (const [index, handle] of handles.entries()) {
+      if (!handlePattern.test(handle)) throw invalid(`"${targets[index]}" is not an @org/team handle`);
+      if (handle.split('/')[0] !== org) throw invalid(`"${targets[index]}" is not in ${org}`);
+      if (handles.indexOf(handle) !== index) throw invalid(`"${targets[index]}" occurs more than once`);
     }
     return { alias: alias.toLowerCase(), groups: mode === 'or' ? [handles.toSorted()] : handles.map(handle => [handle]), number };
   });

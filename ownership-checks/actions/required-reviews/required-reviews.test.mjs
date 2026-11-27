@@ -166,6 +166,7 @@ test('an or alias accepts approvals from members of any of its teams', async () 
   pr.user = { login: 'author' };
   owners.text = '* @n8n-io/AI required';
   assert.equal(await runRequiredReviews(options), 'success');
+  assert.equal(statuses.at(-1).description, 'All required team approvals are present (1 owner)');
   owners.text = '* @n8n-io/ai involved(2)';
   assert.equal(await runRequiredReviews(options), 'success');
   owners.text = '* @n8n-io/ai required(2)';
@@ -197,11 +198,13 @@ test('OWNERS resolves or aliases to one rule and and aliases to one rule per tea
 
 test('team aliases reject invalid, duplicate, cross-organization, and nested definitions', () => {
   for (const [text, error] of [
-    ['@acme/web any @acme/ui', /Invalid team alias on line 1/],
-    ['@acme/web or', /Invalid team alias on line 1/],
-    ['web or @acme/ui', /Invalid team alias on line 1/],
-    ['@acme/web or @acme/ui @Acme/UI', /Invalid team alias on line 1/],
-    ['@acme/web or @other/ui', /Invalid team alias on line 1/],
+    ['@acme/web any @acme/ui', /Invalid team alias on line 1: the mode must be "or" or "and", not "any"/],
+    ['@acme/web', /Invalid team alias on line 1: the mode must be "or" or "and", not ""/],
+    ['@acme/web or', /Invalid team alias on line 1: no team handles follow the mode/],
+    ['web or @acme/ui', /Invalid team alias on line 1: "web" is not an @org\/name handle/],
+    ['@acme/web or acme/ui', /Invalid team alias on line 1: "acme\/ui" is not an @org\/team handle/],
+    ['@acme/web or @acme/ui @Acme/UI', /Invalid team alias on line 1: "@Acme\/UI" occurs more than once/],
+    ['@acme/web or @other/ui', /Invalid team alias on line 1: "@other\/ui" is not in @acme/],
     ['@acme/web or @acme/ui\n@Acme/Web and @acme/qa', /Duplicate team alias on line 2/],
     ['@acme/web or @acme/ui @acme/all\n@acme/all and @acme/qa', /line 1 targets an alias/],
   ]) {

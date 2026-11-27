@@ -148,11 +148,30 @@ more team handles:
 @n8n-io/developer-experience  or   @n8n-io/qa-dx
 ```
 
-- `or`: The rule applies once to all the listed teams together. An approval
-  from a member of any listed team counts. For `involved(k)`, an author who is
-  an active member of any listed team counts as one reviewer.
-- `and`: The rule applies to each listed team separately, as if `OWNERS` had
-  one rule for each team.
+- `or` (any team): The alias is one owner. An approval from an active member
+  of any listed team counts. For `involved(k)`, an author who is an active
+  member of any listed team counts as one reviewer.
+- `and` (all teams): Each listed team is a separate owner, as if `OWNERS` had
+  one rule for each team. Each team must give the approvals that the rule
+  requires.
+
+For example, with these aliases and `OWNERS` rules:
+
+```
+# TEAM_ALIASES
+@n8n-io/ai     or   @n8n-io/ai-agents @n8n-io/ai-trust
+@n8n-io/infra  and  @n8n-io/platform @n8n-io/security
+
+# OWNERS
+packages/ai/     @n8n-io/ai     required
+packages/infra/  @n8n-io/infra  required(2)
+```
+
+- A change in `packages/ai/` needs 1 approval from a member of `ai-agents` or
+  `ai-trust`.
+- A change in `packages/infra/` needs 2 approvals from members of `platform`
+  and 2 approvals from members of `security`. A reviewer who is a member of
+  both teams counts for each team.
 
 Reviewer assignment requests every listed team for both modes. An alias has
 priority over a GitHub team with the same handle. Targets must be teams in the
