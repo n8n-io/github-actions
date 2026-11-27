@@ -128,14 +128,55 @@ publisher in the ruleset. Re-evaluate the affected PRs.
 
 - An `OWNERS` file at the root of the default branch. Each line is a pattern
   (`*`, a repo-relative directory such as `packages/cli/`, or an exact
-  repo-relative path), one
-  `@n8n-io/<team>` handle, and optionally `required`. A repository without an
-  `OWNERS` file gets an `error` status.
+  repo-relative path), one `@n8n-io/<team>` handle or
+  [team alias](#team-aliases), and optionally `required`. A repository without
+  an `OWNERS` file gets an `error` status.
 - `DEVHUB_URL` (or `devhub-url`) is only used for the ownership comment. Without
   it, the comment job is skipped.
 
 A DevHub outage does not affect the verdict. Failure to verify approvals
 against GitHub still does not produce a pass.
+
+## Team aliases
+
+An `OWNERS` rule can use an alias from [`TEAM_ALIASES`](./TEAM_ALIASES) in
+place of a team handle. Each line is an alias handle, `or` or `and`, and one or
+more team handles:
+
+```
+@n8n-io/ai                    or   @n8n-io/ai-agents @n8n-io/ai-assistant @n8n-io/ai-trust
+@n8n-io/developer-experience  or   @n8n-io/qa-dx
+```
+
+- `or` (any team): The alias is one owner. An approval from an active member
+  of any listed team counts. For `involved(k)`, an author who is an active
+  member of any listed team counts as one reviewer.
+- `and` (all teams): Each listed team is a separate owner, as if `OWNERS` had
+  one rule for each team. Each team must give the approvals that the rule
+  requires.
+
+For example, with these aliases and `OWNERS` rules:
+
+```
+# TEAM_ALIASES
+@n8n-io/ai     or   @n8n-io/ai-agents @n8n-io/ai-trust
+@n8n-io/infra  and  @n8n-io/platform @n8n-io/security
+
+# OWNERS
+packages/ai/     @n8n-io/ai     required
+packages/infra/  @n8n-io/infra  required(2)
+```
+
+- A change in `packages/ai/` needs 1 approval from a member of `ai-agents` or
+  `ai-trust`.
+- A change in `packages/infra/` needs 2 approvals from members of `platform`
+  and 2 approvals from members of `security`. A reviewer who is a member of
+  both teams counts for each team.
+
+Reviewer assignment requests every listed team for both modes. An alias has
+priority over a GitHub team with the same handle. Targets must be teams in the
+same organization as the alias, not other aliases. The file ships with the
+action, so a change takes effect in a repository when it updates its pin.
 
 ## Inputs
 
