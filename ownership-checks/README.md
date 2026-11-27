@@ -140,7 +140,10 @@ against GitHub still does not produce a pass.
 ## Approvals for required files only
 
 A reviewer can approve only the files that have a `required` or `involved`
-owner. To do this, write `!required` in the approval message. GitHub counts
+owner. To do this, write `!required` in the approval message. The marker is
+not case-sensitive. A letter, digit, `_`, or `-` must not touch it, so
+`!required.` and `(!required)` count, but `LGTM!required` and
+`!required-reviews` do not. GitHub counts
 this approval for the general approval rule of the branch, but the approval
 does not cover the other files in the PR. Other files are files without an
 owner, files with an owner but no `required` or `involved` option, and test

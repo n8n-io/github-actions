@@ -235,6 +235,15 @@ test('a !required approval covers only files with a required owner', async () =>
   assert.equal(statuses.at(-1).description, 'Waiting for approval from: platform, any reviewer without !required for 1 other file');
 });
 
+test('a rename without a required owner counts as one other file', async () => {
+  const reviews = [{ user: { login: 'alice' }, state: 'APPROVED', body: '!required' }];
+  const files = [{ filename: 'src/service.ts' }, { filename: 'notes/page.md', previous_filename: 'docs/page.md' }];
+  const { options, owners, statuses } = fixture({ files, reviews });
+  owners.text = 'src/ @n8n-io/platform required';
+  assert.equal(await runRequiredReviews(options), 'pending');
+  assert.equal(statuses.at(-1).description, 'Waiting for approval from: any reviewer without !required for 1 other file');
+});
+
 test('a !required approval does not cover test files of a required owner', async () => {
   const reviews = [{ user: { login: 'alice' }, state: 'APPROVED', body: '!required' }];
   const { options, statuses } = fixture({ files: [{ filename: 'src/service.ts' }, { filename: 'src/service.test.ts' }], reviews });
@@ -245,16 +254,20 @@ test('a !required approval does not cover test files of a required owner', async
 test('the latest approval of each reviewer decides whether it is !required', () => {
   const at = minute => `2026-01-01T00:0${minute}:00Z`;
   assert.deepEqual(collectApprovers([
-    { user: { login: 'Alice' }, state: 'APPROVED', body: '!required', submitted_at: at(1) },
     { user: { login: 'alice' }, state: 'APPROVED', body: 'All good', submitted_at: at(2) },
+    { user: { login: 'Alice' }, state: 'APPROVED', body: '!required', submitted_at: at(1) },
     { user: { login: 'bob' }, state: 'APPROVED', body: 'LGTM', submitted_at: at(1) },
     { user: { login: 'bob' }, state: 'APPROVED', body: 'Only my part.\n!REQUIRED', submitted_at: at(2) },
     { user: { login: 'carol' }, state: 'APPROVED', body: 'see !required-reviews and x!required', submitted_at: at(1) },
     { user: { login: 'dave' }, state: 'APPROVED', body: null, submitted_at: at(1) },
+    { user: { login: 'erin' }, state: 'APPROVED', body: 'Owned files only (!required).', submitted_at: at(1) },
+    { user: { login: 'frank' }, state: 'APPROVED', body: 'LGTM !required.', submitted_at: at(1) },
   ]), [
     { login: 'alice', requiredOnly: false },
     { login: 'bob', requiredOnly: true },
     { login: 'carol', requiredOnly: false },
     { login: 'dave', requiredOnly: false },
+    { login: 'erin', requiredOnly: true },
+    { login: 'frank', requiredOnly: true },
   ]);
 });

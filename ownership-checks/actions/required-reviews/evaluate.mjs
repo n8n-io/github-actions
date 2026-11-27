@@ -111,8 +111,10 @@ export async function runRequiredReviews({ github, repository, eventName, sha, p
       const author = pr.user?.login?.toLowerCase();
       const reviewApprovals = approvers.filter(({ login }) => login !== author);
       const reviewers = reviewApprovals.map(({ login }) => login);
+      const otherSet = new Set(otherPaths);
+      const otherFiles = files.filter(file => otherSet.has(file.filename) || otherSet.has(file.previous_filename)).length;
       // GitHub counts a `!required` approval, so the other files need a full approval.
-      const needsFullApproval = otherPaths.length > 0 &&
+      const needsFullApproval = otherFiles > 0 &&
         reviewApprovals.some(({ requiredOnly }) => requiredOnly) && !reviewApprovals.some(({ requiredOnly }) => !requiredOnly);
       if (!teams.length && !needsFullApproval) return ['success', 'No team approval is required for these changes'];
       const missing = [];
@@ -132,7 +134,7 @@ export async function runRequiredReviews({ github, repository, eventName, sha, p
         const name = slugs.join(' or ');
         if (needed > 0) missing.push(needed === 1 ? name : `${needed} from ${name}`);
       }
-      if (needsFullApproval) missing.push(`any reviewer without !required for ${otherPaths.length} other file${otherPaths.length === 1 ? '' : 's'}`);
+      if (needsFullApproval) missing.push(`any reviewer without !required for ${otherFiles} other file${otherFiles === 1 ? '' : 's'}`);
       return missing.length
         ? ['pending', `Waiting for approval from: ${missing.join(', ')}`]
         : ['success', `All required team approvals are present (${teams.length} owner${teams.length === 1 ? '' : 's'})`];

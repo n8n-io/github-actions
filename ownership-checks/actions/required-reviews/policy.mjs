@@ -5,7 +5,7 @@ export function missingApprovals(rule, approvals, authorIsMember) {
 }
 
 // An approval with `!required` in its body covers only files that have a required owner.
-const requiredOnlyMarker = /(?:^|\s)!required(?=\s|$)/i;
+const requiredOnlyMarker = /(?<![\w-])!required(?![\w-])/i;
 
 /** @returns {{ login: string, requiredOnly: boolean }[]} */
 export function collectApprovers(reviews) {
